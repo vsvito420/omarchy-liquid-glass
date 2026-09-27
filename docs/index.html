@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en" data-variant="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liquid Glass for Omarchy</title>
+<meta name="description" content="A macOS / iOS-inspired liquid glass theme for Omarchy — dark, light and warm sepia. Frosted blur, rounded windows, springy animations.">
+<meta property="og:title" content="Liquid Glass for Omarchy">
+<meta property="og:description" content="Frosted blur, rounded windows and springy animations for Omarchy — in dark, light and warm.">
+<meta property="og:image" content="assets/bg-dark.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2364d2ff'/%3E%3Cstop offset='.5' stop-color='%23bf5af2'/%3E%3Cstop offset='1' stop-color='%23ff6b9a'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='6' y='6' width='52' height='52' rx='16' fill='url(%23g)'/%3E%3Crect x='6.5' y='6.5' width='51' height='51' rx='15.5' fill='none' stroke='white' stroke-opacity='.6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --spring: cubic-bezier(.16, 1, .3, 1.04);
+  --radius: 22px;
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+html[data-variant="dark"] {
+  color-scheme: dark;
+  --fg: #f5f5f7; --fg-2: #e5e5ea; --muted: #a1a1a8;
+  --glass: rgba(28, 28, 30, .46); --glass-strong: rgba(28, 28, 30, .66); --glass-soft: rgba(255, 255, 255, .06);
+  --rim: rgba(255, 255, 255, .20); --rim-strong: rgba(255, 255, 255, .34);
+  --accent: #0a84ff; --accent-fg: #ffffff; --sel: #2c4a78;
+  --shadow: 0 24px 60px rgba(0, 0, 0, .45), 0 2px 8px rgba(0, 0, 0, .25);
+  --term-bg: rgba(28, 28, 30, .72); --code-bg: rgba(0, 0, 0, .35);
+  --c0: #1c1c1e; --c1: #ff453a; --c2: #30d158; --c3: #ffd60a; --c4: #0a84ff; --c5: #bf5af2; --c6: #64d2ff; --c7: #f5f5f7;
+  --c8: #636366; --c9: #ff6961; --c10: #63e6a0; --c11: #ffe066; --c12: #409cff; --c13: #da8fff; --c14: #8ee0ff; --c15: #ffffff;
+}
+html[data-variant="light"] {
+  color-scheme: light;
+  --fg: #1d1d1f; --fg-2: #3a3a3c; --muted: #5e5e63;
+  --glass: rgba(245, 245, 247, .52); --glass-strong: rgba(245, 245, 247, .74); --glass-soft: rgba(255, 255, 255, .35);
+  --rim: rgba(255, 255, 255, .75); --rim-strong: rgba(255, 255, 255, .95);
+  --accent: #007aff; --accent-fg: #ffffff; --sel: #b3d7ff;
+  --shadow: 0 24px 60px rgba(40, 40, 80, .20), 0 2px 8px rgba(0, 0, 0, .08);
+  --term-bg: rgba(245, 245, 247, .78); --code-bg: rgba(255, 255, 255, .5);
+  --c0: #f5f5f7; --c1: #d70015; --c2: #248a3d; --c3: #a05a00; --c4: #0040dd; --c5: #8944ab; --c6: #0071a4; --c7: #1d1d1f;
+  --c8: #8e8e93; --c9: #ff3b30; --c10: #34c759; --c11: #b25000; --c12: #007aff; --c13: #af52de; --c14: #008299; --c15: #000000;
+}
+html[data-variant="warm"] {
+  color-scheme: light;
+  --fg: #3c2f25; --fg-2: #54433a; --muted: #6f5a48;
+  --glass: rgba(236, 224, 200, .56); --glass-strong: rgba(236, 224, 200, .78); --glass-soft: rgba(255, 244, 224, .35);
+  --rim: rgba(255, 244, 224, .75); --rim-strong: rgba(255, 244, 224, .95);
+  --accent: #c0602a; --accent-fg: #fff4e0; --sel: #e3c49a;
+  --shadow: 0 24px 60px rgba(60, 42, 26, .22), 0 2px 8px rgba(60, 42, 26, .10);
+  --term-bg: rgba(236, 224, 200, .82); --code-bg: rgba(255, 244, 224, .5);
+  --c0: #ece0c8; --c1: #b3401e; --c2: #66751c; --c3: #9a6a05; --c4: #3e6a8a; --c5: #99486a; --c6: #3f7f6f; --c7: #3c2f25;
+  --c8: #9a8670; --c9: #cc5a35; --c10: #7f8f2a; --c11: #b07d10; --c12: #4f7fa0; --c13: #b05a7c; --c14: #4f9282; --c15: #2a1f18;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+body {
+  margin: 0; font-family: var(--font); color: var(--fg); background: var(--c0);
+  line-height: 1.55; -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  transition: color .5s ease, background-color .5s ease;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; display: block; }
+
+.backdrop { position: fixed; inset: 0; z-index: -1; }
+.backdrop div {
+  position: absolute; inset: -4%; background-size: cover; background-position: center;
+  opacity: 0; transition: opacity .9s ease; transform: scale(1.02);
+}
+html[data-variant="dark"] .backdrop .dark,
+html[data-variant="light"] .backdrop .light,
+html[data-variant="warm"] .backdrop .warm { opacity: 1; }
+.backdrop .dark { background-image: url(assets/bg-dark.jpg); }
+.backdrop .light { background-image: url(assets/bg-light.jpg); }
+.backdrop .warm { background-image: url(assets/bg-warm.jpg); }
+
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid var(--rim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim-strong);
+  transition: background-color .5s ease, border-color .5s ease, box-shadow .5s ease;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: sticky; top: 12px; z-index: 10; margin: 12px auto 0; width: min(1120px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 16px; padding: 8px 10px 8px 16px; border-radius: 16px;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; color: var(--fg); white-space: nowrap; }
+.brand:hover { text-decoration: none; }
+.brand .logo {
+  width: 22px; height: 22px; border-radius: 7px;
+  background: linear-gradient(135deg, #64d2ff, #bf5af2 55%, #ff6b9a);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .55);
+}
+.nav { display: flex; gap: 4px; margin-left: auto; }
+.nav a { color: var(--fg-2); font-size: 14px; font-weight: 500; padding: 6px 10px; border-radius: 10px; }
+.nav a:hover { background: var(--glass-soft); text-decoration: none; }
+
+.switch {
+  position: relative; display: inline-grid; grid-template-columns: repeat(3, 1fr);
+  padding: 3px; border-radius: 12px; background: var(--glass-soft); border: 1px solid var(--rim);
+}
+.switch button {
+  position: relative; z-index: 1; appearance: none; border: 0; background: none; cursor: pointer;
+  font: 600 13px var(--font); color: var(--fg-2); padding: 6px 12px; border-radius: 9px; min-width: 58px;
+}
+.switch button[aria-pressed="true"] { color: var(--accent-fg); }
+.switch .pill {
+  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 3);
+  border-radius: 9px; background: var(--accent); box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+  transition: transform .5s var(--spring), background-color .5s ease;
+}
+html[data-variant="light"] .switch .pill { transform: translateX(100%); }
+html[data-variant="warm"] .switch .pill { transform: translateX(200%); }
+
+main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+section { padding: 56px 0 8px; }
+h1, h2, h3 { letter-spacing: -.025em; line-height: 1.12; margin: 0; }
+h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 800; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.lead { font-size: 18px; color: var(--fg-2); max-width: 640px; margin: 14px 0 0; }
+.section-head { padding: 28px 32px; margin-bottom: 18px; }
+
+/* ---------- hero ---------- */
+.hero { display: grid; grid-template-columns: 1fr 1.15fr; gap: 28px; align-items: center; padding-top: 48px; }
+.hero-copy { padding: 36px; }
+.hero h1 { font-size: clamp(40px, 6vw, 68px); font-weight: 800; }
+.hero h1 span {
+  background: linear-gradient(100deg, var(--c6), var(--c5) 50%, var(--c9));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero p { font-size: 18px; color: var(--fg-2); margin: 18px 0 26px; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 13px;
+  font: 600 15px var(--font); border: 1px solid var(--rim); cursor: pointer; color: var(--fg);
+  background: var(--glass-soft); transition: transform .35s var(--spring), background-color .3s;
+}
+.btn:hover { text-decoration: none; transform: translateY(-2px); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+.btn svg { width: 18px; height: 18px; }
+
+/* mock desktop */
+.desk { position: relative; aspect-ratio: 16 / 11; }
+.desk .mbar {
+  position: absolute; top: 0; left: 0; right: 0; height: 30px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
+  font: 600 12px var(--mono); color: var(--fg);
+}
+.ws { display: flex; gap: 6px; }
+.ws i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg); opacity: .35; }
+.ws i.on { opacity: 1; width: 18px; border-radius: 4px; background: var(--accent); }
+.mbar .right { display: flex; gap: 12px; opacity: .85; }
+.win {
+  position: absolute; border-radius: 18px; overflow: hidden;
+  animation: pop .7s var(--spring) both;
+}
+.win .tb { height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 12px; }
+.win .tb i { width: 11px; height: 11px; border-radius: 50%; }
+.win .tb i:nth-child(1) { background: #ff5f57; }
+.win .tb i:nth-child(2) { background: #febc2e; }
+.win .tb i:nth-child(3) { background: #28c840; }
+.win .tb span { margin-left: 8px; font: 500 12px var(--font); color: var(--muted); }
+.term { top: 44px; left: 0; width: 64%; bottom: 0; background: var(--term-bg); }
+.term pre {
+  margin: 0; padding: 6px 16px 16px; font: 12.5px/1.65 var(--mono); color: var(--c7);
+  white-space: pre-wrap; word-break: break-word;
+}
+.p { color: var(--c4); font-weight: 600; } .g { color: var(--c2); } .y { color: var(--c3); }
+.m { color: var(--c5); } .c { color: var(--c6); } .r { color: var(--c1); } .d { color: var(--c8); }
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-top: 8px; }
+.swatches b { height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, .25); }
+.side { top: 44px; right: 0; width: 33%; padding: 14px; display: flex; flex-direction: column; gap: 10px; animation-delay: .08s; }
+.side .clock { font: 700 34px var(--font); letter-spacing: -.03em; }
+.side .date { font-size: 12px; color: var(--muted); margin-top: -8px; }
+.notif { padding: 10px 12px; border-radius: 13px; background: var(--glass-soft); border: 1px solid var(--rim); font-size: 12px; }
+.notif strong { display: block; font-size: 12.5px; }
+.notif span { color: var(--muted); }
+.slider { height: 6px; border-radius: 3px; background: var(--glass-soft); border: 1px solid var(--rim); overflow: hidden; }
+.slider i { display: block; height: 100%; width: 62%; background: var(--accent); }
+.slabel { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-bottom: -4px; }
+@keyframes pop { from { opacity: 0; transform: scale(.92) translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ---------- variants ---------- */
+.variants { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.variant { padding: 12px; cursor: pointer; text-align: left; font: inherit; color: inherit; transition: transform .45s var(--spring), border-color .3s; }
+.variant:hover { transform: translateY(-4px); }
+.variant[aria-pressed="true"] { border-color: var(--accent); box-shadow: var(--shadow), 0 0 0 2px var(--accent); }
+.variant .thumb { position: relative; aspect-ratio: 16 / 10; border-radius: 14px; background-size: cover; background-position: center; overflow: hidden; }
+.variant .mini {
+  position: absolute; left: 12%; top: 18%; right: 12%; bottom: 14%; border-radius: 10px;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, .5); padding: 10px 12px; font: 11px/1.6 var(--mono);
+}
+.variant .body { padding: 14px 8px 6px; }
+.variant h3 { font-size: 20px; }
+.variant p { margin: 6px 0 12px; color: var(--muted); font-size: 14.5px; }
+.chips { display: flex; gap: 5px; }
+.chips i { width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(128, 128, 128, .3); }
+
+/* ---------- features ---------- */
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.feature { padding: 24px; }
+.feature .ico {
+  width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 14px;
+  background: var(--glass-soft); border: 1px solid var(--rim); color: var(--accent);
+}
+.feature .ico svg { width: 22px; height: 22px; }
+.feature h3 { font-size: 18px; margin-bottom: 6px; }
+.feature p { margin: 0; color: var(--fg-2); font-size: 15px; }
+
+/* ---------- install ---------- */
+.two { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; align-items: start; }
+.panel { padding: 28px; }
+.panel h3 { font-size: 20px; margin-bottom: 8px; }
+.panel p { color: var(--fg-2); margin: 0 0 14px; }
+.code {
+  position: relative; background: var(--code-bg); border: 1px solid var(--rim); border-radius: 14px;
+  font: 13.5px/1.75 var(--mono); padding: 14px 76px 14px 16px; overflow-x: auto; margin: 0 0 12px;
+  white-space: pre;
+}
+.code .d { user-select: none; }
+.copy {
+  position: absolute; top: 8px; right: 8px; appearance: none; cursor: pointer;
+  font: 600 12px var(--font); color: var(--fg); padding: 5px 10px; border-radius: 9px;
+  background: var(--glass-strong); border: 1px solid var(--rim);
+}
+.note { font-size: 14.5px; color: var(--fg-2); border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; margin: 16px 0 0; }
+code.inline { font: 13px var(--mono); background: var(--code-bg); padding: 1px 6px; border-radius: 6px; border: 1px solid var(--rim); }
+.steps { margin: 0; padding-left: 20px; color: var(--fg-2); }
+.steps li { margin: 6px 0; }
+
+/* ---------- screensaver ---------- */
+.shot { padding: 10px; }
+.shot img { border-radius: 14px; image-rendering: pixelated; width: 100%; }
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+td { padding: 8px 0; border-top: 1px solid var(--rim); vertical-align: top; color: var(--fg-2); }
+td:first-child { width: 90px; }
+
+/* ---------- sepia demo ---------- */
+.browser { overflow: hidden; padding: 0; }
+.browser .chrome { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--rim); }
+.browser .url { flex: 1; font: 12px var(--mono); color: var(--muted); background: var(--glass-soft); border: 1px solid var(--rim); padding: 5px 10px; border-radius: 9px; }
+.page { --pw: #ffffff; --pg: #f0f0f0; background: var(--pw); color: #2b2b2b; padding: 22px 24px; transition: background-color .6s ease; }
+.page.sepia { --pw: #ece0c8; --pg: #ddd2bc; }
+.page h4 { margin: 0 0 6px; font-size: 20px; letter-spacing: -.02em; }
+.page .meta { font-size: 12px; color: #777; margin-bottom: 12px; }
+.page p { font-size: 13.5px; margin: 0 0 12px; color: #444; }
+.page .box { background: var(--pg); border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #444; transition: background-color .6s ease; }
+.page .img { height: 70px; border-radius: 10px; margin: 12px 0; background: linear-gradient(120deg, #3aa0ff, #bf5af2 60%, #ff6b9a); }
+.page .imgcap { font-size: 11.5px; color: #888; margin: -6px 0 10px; }
+.toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; font-size: 14px; user-select: none; }
+.toggle input { position: absolute; opacity: 0; }
+.toggle .track { width: 44px; height: 26px; border-radius: 13px; background: var(--glass-soft); border: 1px solid var(--rim); position: relative; transition: background-color .3s; }
+.toggle .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); transition: transform .45s var(--spring); }
+.toggle input:checked + .track { background: #c0602a; }
+.toggle input:checked + .track::after { transform: translateX(18px); }
+.toggle input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- gallery ---------- */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.gallery figure { margin: 0; padding: 8px; }
+.gallery img { border-radius: 12px; aspect-ratio: 16 / 10; object-fit: cover; width: 100%; height: auto; }
+.gallery figcaption { font: 12px var(--mono); color: var(--muted); padding: 8px 4px 2px; }
+.gallery figure { animation: pop .6s var(--spring) both; }
+
+footer { width: min(1120px, calc(100% - 32px)); margin: 56px auto 24px; padding: 20px 24px; display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; font-size: 14px; color: var(--fg-2); border-radius: 16px; }
+
+@media (max-width: 920px) {
+  .hero, .two { grid-template-columns: 1fr; }
+  .variants, .features { grid-template-columns: 1fr 1fr; }
+  .nav { display: none; }
+  .switch { margin-left: auto; }
+}
+@media (max-width: 600px) {
+  .variants, .features { grid-template-columns: 1fr; }
+  .hero-copy, .panel, .section-head { padding: 22px; }
+  .desk { aspect-ratio: auto; display: flex; flex-direction: column; gap: 12px; }
+  .desk .mbar, .desk .win { position: relative; inset: auto; width: auto; height: auto; }
+  .desk .mbar { height: 30px; }
+  .desk .side { display: none; }
+  .brand .name { display: none; }
+  .switch button { min-width: 0; padding: 6px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true"><div class="dark"></div><div class="light"></div><div class="warm"></div></div>
+
+<header class="topbar glass">
+  <a class="brand" href="#top"><span class="logo"></span><span class="name">Liquid Glass</span></a>
+  <nav class="nav">
+    <a href="#variants">Variants</a>
+    <a href="#install">Install</a>
+    <a href="#screensaver">Screensaver</a>
+    <a href="#sepia">Sepia web</a>
+    <a href="#wallpapers">Wallpapers</a>
+    <a href="https://github.com/vsvito420/omarchy-liquid-glass">GitHub</a>
+  </nav>
+  <div class="switch" role="group" aria-label="Theme variant">
+    <span class="pill"></span>
+    <button data-set="dark">Dark</button>
+    <button data-set="light">Light</button>
+    <button data-set="warm">Warm</button>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="hero-copy glass">
+      <div class="eyebrow">Theme for Omarchy</div>
+      <h1>Liquid <span>Glass</span></h1>
+      <p>A macOS / iOS-inspired look for Omarchy: rounded squircle windows, frosted blur behind everything, translucent terminals and springy animations. In dark, light and a warm sepia variant that's easy on the eyes.</p>
+      <div class="cta">
+        <a class="btn primary" href="#install">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16"/></svg>
+          Install
+        </a>
+        <a class="btn" href="https://github.com/vsvito420/omarchy-liquid-glass">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.39-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+    </div>
+
+    <div class="desk" aria-label="Preview of the theme on an Omarchy desktop">
+      <div class="mbar glass">
+        <div class="ws"><i class="on"></i><i></i><i></i><i></i></div>
+        <div id="barclock">12:00</div>
+        <div class="right"><span>wifi</span><span>100%</span></div>
+      </div>
+      <div class="win term glass">
+        <div class="tb"><i></i><i></i><i></i><span>~ — foot</span></div>
+<pre><span class="p">~</span> <span class="g">❯</span> omarchy theme set <span class="y">"Liquid Glass <span id="tv">Dark</span>"</span>
+<span class="d">Applying theme…</span> <span class="g">✓</span> hypr <span class="g">✓</span> shell <span class="g">✓</span> term
+<span class="p">~</span> <span class="g">❯</span> ls themes/
+<span class="c">liquid-glass-dark</span>  <span class="c">liquid-glass-light</span>  <span class="c">liquid-glass-warm</span>
+<span class="p">~</span> <span class="g">❯</span> git log --oneline -2
+<span class="y">ad64b3f</span> Add warm sepia variant and sepia web
+<span class="y">d11c99e</span> Turn the screensaver into a drive
+<span class="p">~</span> <span class="g">❯</span> <span class="m">palette</span>
+<div class="swatches"><b style="background:var(--c0)"></b><b style="background:var(--c1)"></b><b style="background:var(--c2)"></b><b style="background:var(--c3)"></b><b style="background:var(--c4)"></b><b style="background:var(--c5)"></b><b style="background:var(--c6)"></b><b style="background:var(--c7)"></b><b style="background:var(--c8)"></b><b style="background:var(--c9)"></b><b style="background:var(--c10)"></b><b style="background:var(--c11)"></b><b style="background:var(--c12)"></b><b style="background:var(--c13)"></b><b style="background:var(--c14)"></b><b style="background:var(--c15)"></b></div></pre>
+      </div>
+      <div class="win side glass">
+        <div class="clock" id="bigclock">12:00</div>
+        <div class="date" id="date">Sunday</div>
+        <div class="notif"><strong>Theme changed</strong><span id="notif">Liquid Glass Dark is now active</span></div>
+        <div class="slabel"><span>Volume</span><span>62%</span></div>
+        <div class="slider"><i></i></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="variants">
+    <div class="section-head glass">
+      <div class="eyebrow">Three variants</div>
+      <h2>Pick your glass</h2>
+      <p class="lead">Every variant ships its own palette, wallpapers, terminal colors and shell styling. Click one to preview it on this page.</p>
+    </div>
+    <div class="variants">
+      <button class="variant glass" data-set="dark">
+        <div class="thumb" style="background-image:url(assets/walls/dark-1-aurora.jpg)">
+          <div class="mini" style="background:rgba(28,28,30,.55);color:#f5f5f7"><span style="color:#0a84ff">~</span> <span style="color:#30d158">❯</span> fastfetch<br><span style="color:#64d2ff">omarchy</span>@glass</div>
+        </div>
+        <div class="body">
+          <h3>Dark</h3>
+          <p>Apple's dark system colors on a glowing aurora. Glass rim instead of a colored border.</p>
+          <div class="chips"><i style="background:#1c1c1e"></i><i style="background:#0a84ff"></i><i style="background:#bf5af2"></i><i style="background:#30d158"></i><i style="background:#ff453a"></i><i style="background:#ffd60a"></i></div>
+        </div>
+      </button>
+      <button class="variant glass" data-set="light">
+        <div class="thumb" style="background-image:url(assets/walls/light-1-bloom.jpg)">
+          <div class="mini" style="background:rgba(245,245,247,.6);color:#1d1d1f"><span style="color:#0040dd">~</span> <span style="color:#248a3d">❯</span> fastfetch<br><span style="color:#0071a4">omarchy</span>@glass</div>
+        </div>
+        <div class="body">
+          <h3>Light</h3>
+          <p>Bright and airy, with accessible high-contrast text colors on pastel blooms.</p>
+          <div class="chips"><i style="background:#f5f5f7"></i><i style="background:#007aff"></i><i style="background:#8944ab"></i><i style="background:#248a3d"></i><i style="background:#d70015"></i><i style="background:#a05a00"></i></div>
+        </div>
+      </button>
+      <button class="variant glass" data-set="warm">
+        <div class="thumb" style="background-image:url(assets/walls/warm-1-bloom.jpg)">
+          <div class="mini" style="background:rgba(236,224,200,.65);color:#3c2f25"><span style="color:#3e6a8a">~</span> <span style="color:#66751c">❯</span> fastfetch<br><span style="color:#3f7f6f">omarchy</span>@glass</div>
+        </div>
+        <div class="body">
+          <h3>Warm</h3>
+          <p>Parchment background, brown text and a terracotta accent. Light, but easy on the eyes.</p>
+          <div class="chips"><i style="background:#ece0c8"></i><i style="background:#c0602a"></i><i style="background:#99486a"></i><i style="background:#66751c"></i><i style="background:#b3401e"></i><i style="background:#9a6a05"></i></div>
+        </div>
+      </button>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="features">
+      <div class="feature glass">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="6"/></svg></div>
+        <h3>Squircle windows</h3>
+        <p>18px rounding with a squircle curve, a thin light rim and soft layered shadows.</p>
+      </div>
+      <div class="feature glass">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h16M4 12h10M4 16h13"/></svg></div>
+        <h3>Frosted blur</h3>
+        <p>Blur behind windows, the bar, menus, notifications and the OSD, with a touch of vibrancy.</p>
+      </div>
+      <div class="feature glass">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 4 4-4 4M12 16h7"/></svg></div>
+        <h3>Crisp translucent terminals</h3>
+        <p>Transparency comes from foot, Alacritty, kitty or Ghostty itself, so text stays sharp.</p>
+      </div>
+      <div class="feature glass">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17c3 0 4-10 9-10s5 6 9 6"/></svg></div>
+        <h3>Springy motion</h3>
+        <p>An iOS-like spring curve for windows popping in, layers fading and workspaces sliding.</p>
+      </div>
+      <div class="feature glass">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><circle cx="12" cy="16" r="3"/></svg></div>
+        <h3>Apple-style palettes</h3>
+        <p>System colors for dark and light, plus an earthy palette for the warm variant.</p>
+      </div>
+      <div class="feature glass">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg></div>
+        <h3>Original wallpapers</h3>
+        <p>Soft gradient wallpapers for every variant, plus a synthwave Omarchy one in dark.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="two">
+      <div class="panel glass">
+        <div class="eyebrow">Install</div>
+        <h2>Three commands</h2>
+        <p style="margin-top:12px">Clone the repo, copy the themes into place and apply the one you like.</p>
+        <div class="code"><button class="copy" data-copy="git clone https://github.com/vsvito420/omarchy-liquid-glass.git
+cd omarchy-liquid-glass
+./install.sh">Copy</button><span class="d">$ </span>git clone https://github.com/vsvito420/omarchy-liquid-glass.git
+<span class="d">$ </span>cd omarchy-liquid-glass
+<span class="d">$ </span>./install.sh</div>
+        <div class="code"><button class="copy" data-copy='omarchy theme set "Liquid Glass Dark"' id="applycopy">Copy</button><span class="d">$ </span>omarchy theme set <span class="y">"Liquid Glass <span class="tv2">Dark</span>"</span></div>
+        <p style="font-size:14.5px;margin:0">Open a new terminal window afterwards to see the translucent background.</p>
+      </div>
+      <div class="panel glass">
+        <h3>Why not <code class="inline">omarchy theme install</code>?</h3>
+        <p>For safety, Omarchy strips <code class="inline">hyprland.lua</code> and terminal configs from themes installed as git clones. That's exactly where the blur, rounding and transparency live, so <code class="inline">install.sh</code> copies the themes into <code class="inline">~/.config/omarchy/themes</code> instead.</p>
+        <p class="note">Read the files before installing — <code class="inline">hyprland.lua</code> is executed by Hyprland.</p>
+        <h3 style="margin-top:22px">Tweaking</h3>
+        <table>
+          <tr><td>Blur</td><td>Rounding, shadows, opacity and animations in <code class="inline">hyprland.lua</code></td></tr>
+          <tr><td>Bar</td><td>Menu and notification translucency in <code class="inline">shell.toml</code></td></tr>
+          <tr><td>Colors</td><td>Palette in <code class="inline">colors.toml</code></td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="screensaver">
+    <div class="two">
+      <div class="shot glass"><img src="assets/screensaver.jpg" alt="The screensaver at dawn, noon, sunset and night" width="944" height="496" loading="lazy"></div>
+      <div class="panel glass">
+        <div class="eyebrow">Optional</div>
+        <h2>A drive through glass</h2>
+        <p style="margin-top:12px">A night drive down a wet glass road past frosted mountains, with raindrops on the windshield and a pixel clock in the sky. The sky follows the real time of day.</p>
+        <table>
+          <tr><td><code class="inline">retro</code></td><td>Stylised synthwave day that follows the clock</td></tr>
+          <tr><td><code class="inline">sun</code></td><td>The real sun and moon for your location, fully offline</td></tr>
+        </table>
+        <div class="code" style="margin-top:14px"><button class="copy" data-copy="./screensaver/install.sh">Copy</button><span class="d">$ </span>./screensaver/install.sh</div>
+        <p style="font-size:14.5px;margin:0">Plain Python 3.11+, no extra packages. It runs only while a Liquid Glass theme is applied.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sepia">
+    <div class="two">
+      <div class="panel glass">
+        <div class="eyebrow">Browser extension</div>
+        <h2>Sepia web pages</h2>
+        <p style="margin-top:12px">White web pages can glare next to the warm theme. <strong>Sepia Web</strong> for Chromium and Chrome swaps white backgrounds for the theme's parchment color. Images, videos, gradients and dark sites stay untouched, and it only acts while <strong>Liquid Glass Warm</strong> is applied.</p>
+        <ol class="steps">
+          <li>Run <code class="inline">./sepia-web/install.sh</code></li>
+          <li>Open <code class="inline">chrome://extensions</code> and enable <em>Developer mode</em></li>
+          <li>Click <em>Load unpacked</em> and pick <code class="inline">sepia-web/extension</code></li>
+        </ol>
+        <p class="note">A tiny native helper tells the extension which Omarchy theme is active. No sudo, no browser policies.</p>
+      </div>
+      <div>
+        <div class="browser glass">
+          <div class="chrome">
+            <span class="url">example.com/article</span>
+            <label class="toggle"><input type="checkbox" id="sepiaToggle"><span class="track"></span>Sepia</label>
+          </div>
+          <div class="page" id="page">
+            <h4>Reading on a white page</h4>
+            <div class="meta">5 min read</div>
+            <p>Bright white backgrounds are tiring at night. The extension tints them to match your desktop while keeping light-grey shades a step darker, so the layout stays readable.</p>
+            <div class="img"></div>
+            <div class="imgcap">Images keep their colors.</div>
+            <div class="box">Light-grey panels become a slightly darker sepia.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="wallpapers">
+    <div class="section-head glass">
+      <div class="eyebrow">Wallpapers</div>
+      <h2>Included with <span id="wv">Dark</span></h2>
+      <p class="lead">Generated with ImageMagick and free to use. Switch variants at the top to see the others.</p>
+    </div>
+    <div class="gallery" id="gallery"></div>
+  </section>
+</main>
+
+<footer class="glass">
+  <span>Liquid Glass for Omarchy · MIT license</span>
+  <span>Frosted glass only — Hyprland can't do real refraction. Not affiliated with Apple.</span>
+</footer>
+
+<script>
+(() => {
+  const root = document.documentElement;
+  const names = { dark: "Dark", light: "Light", warm: "Warm" };
+  const walls = {
+    dark: ["1-aurora", "2-deep", "3-waves", "4-omarchy", "5-omarchy-cool"],
+    light: ["1-bloom", "2-sky", "3-waves"],
+    warm: ["1-bloom", "2-sky", "3-waves"],
+  };
+  const gallery = document.getElementById("gallery");
+
+  function renderGallery(v) {
+    gallery.replaceChildren(...walls[v].map((w, i) => {
+      const fig = document.createElement("figure");
+      fig.className = "glass";
+      fig.style.animationDelay = i * 50 + "ms";
+      const img = document.createElement("img");
+      img.src = `assets/walls/${v}-${w}.jpg`;
+      img.alt = `${names[v]} wallpaper ${w}`;
+      img.loading = "lazy";
+      img.width = 640; img.height = 400;
+      const cap = document.createElement("figcaption");
+      cap.textContent = w + (w.includes("omarchy") ? ".png" : ".jpg");
+      fig.append(img, cap);
+      return fig;
+    }));
+  }
+
+  function setVariant(v, save) {
+    if (!names[v]) return;
+    root.dataset.variant = v;
+    document.querySelectorAll("[data-set]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.set === v)));
+    document.getElementById("tv").textContent = names[v];
+    document.querySelectorAll(".tv2").forEach(e => e.textContent = names[v]);
+    document.getElementById("wv").textContent = names[v];
+    document.getElementById("notif").textContent = `Liquid Glass ${names[v]} is now active`;
+    document.getElementById("applycopy").dataset.copy = `omarchy theme set "Liquid Glass ${names[v]}"`;
+    document.querySelectorAll(".win").forEach(w => { w.style.animation = "none"; void w.offsetWidth; w.style.animation = ""; });
+    renderGallery(v);
+    if (save) { try { localStorage.setItem("lg-variant", v); } catch {} }
+  }
+
+  document.querySelectorAll("[data-set]").forEach(b => b.addEventListener("click", () => setVariant(b.dataset.set, true)));
+
+  let initial = new URLSearchParams(location.search).get("v");
+  if (!names[initial]) { try { initial = localStorage.getItem("lg-variant"); } catch {} }
+  if (!names[initial]) initial = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  setVariant(initial, false);
+
+  document.querySelectorAll(".copy").forEach(btn => btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      btn.textContent = "Copied";
+    } catch { btn.textContent = "Select & copy"; }
+    setTimeout(() => btn.textContent = "Copy", 1400);
+  }));
+
+  document.getElementById("sepiaToggle").addEventListener("change", e => {
+    document.getElementById("page").classList.toggle("sepia", e.target.checked);
+  });
+
+  function tick() {
+    const d = new Date();
+    const t = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    document.getElementById("barclock").textContent = t;
+    document.getElementById("bigclock").textContent = t;
+    document.getElementById("date").textContent = d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+  }
+  tick();
+  setInterval(tick, 10000);
+})();
+</script>
+</body>
+</html>
