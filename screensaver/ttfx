@@ -1,0 +1,20 @@
+#!/bin/bash
+# Liquid Glass screensaver shim (installed to /usr/local/bin/ttfx, ahead of /usr/bin/ttfx).
+# When omarchy-screensaver asks for a random effect while a liquid-glass theme is
+# active, draw the glass scene instead. Every other ttfx call passes straight through.
+# Remove with: sudo rm /usr/local/bin/ttfx
+
+renderer=$HOME/.local/bin/liquid-glass-screensaver
+theme=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)
+
+if [[ " $* " == *" --random-effect "* && $theme == liquid-glass-* && -x $renderer ]]; then
+  # Stay alive as "ttfx" so the screensaver loop's `pgrep -x ttfx` keeps seeing us,
+  # and take the renderer down with us when it runs `pkill -x ttfx`.
+  "$renderer" &
+  child=$!
+  trap 'kill $child 2>/dev/null; exit 0' TERM HUP INT QUIT
+  wait $child
+  exit
+fi
+
+exec /usr/bin/ttfx "$@"

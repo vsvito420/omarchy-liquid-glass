@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""Liquid Glass screensaver for Omarchy — retro edition.
+
+A synthwave scene (striped sun behind mountains, neon perspective grid, stars)
+seen through liquid-glass droplets and a frosted glass card holding a chunky
+pixel clock, finished with CRT scanlines. The sky follows the real 24h day:
+sunrise, blue noon, synthwave sunset, moon and stars at night. Truecolor
+half-block pixels; accent colors come from the active Omarchy theme
+(~/.local/state/omarchy/current/theme/colors.toml).
+
+Runs until killed. Never reads stdin, so the stock omarchy-screensaver loop can
+keep watching for keypresses while this draws.
+
+Preview helpers: LG_HOUR=19.5 pins the sky to a time of day, LG_SPEED=1
+fast-forwards the sky by one hour per second.
+"""
+
+import ctypes
+import math
+import os
+import random
+import signal
+import sys
+import time
+import tomllib
+from datetime import datetime
+
+FPS = 24
+THEME = os.path.expanduser("~/.local/state/omarchy/current/theme/colors.toml")
+
+WEEKDAYS = ["MONTAG", "DIENSTAG", "MITTWOCH", "DONNERSTAG", "FREITAG", "SAMSTAG", "SONNTAG"]
+
+# 5x7 pixel font
+FONT = {
+    "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+    "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+    "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+    "3": ["11111", "00010", "00100", "00010", "00001", "10001", "01110"],
+    "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+    "5": ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
+    "6": ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
+    "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+    "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+    "9": ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
+    ":": ["0", "1", "1", "0", "1", "1", "0"],
+}
+
+# Sky over the day: (hour, zenith, horizon, star visibility)
+SKY = [
+    (0.0, (.01, .01, .05), (.10, .04, .22), 1.0),
+    (4.5, (.02, .02, .07), (.16, .06, .28), 1.0),
+    (6.0, (.10, .07, .28), (.95, .42, .38), .4),
+    (7.5, (.16, .30, .62), (.95, .70, .55), 0.0),
+    (12.0, (.06, .32, .78), (.55, .78, .98), 0.0),
+    (16.5, (.10, .26, .62), (.85, .65, .55), 0.0),
+    (18.8, (.10, .04, .24), (.60, .18, .50), .2),
+    (20.5, (.04, .02, .12), (.30, .08, .32), .7),
+    (22.0, (.015, .01, .06), (.14, .05, .25), 1.0),
+    (24.0, (.01, .01, .05), (.10, .04, .22), 1.0),
+]
+
+
+def set_process_name(name):
+    # The stock screensaver loop polls `pgrep -x ttfx`; answer to that name.
+    try:
+        ctypes.CDLL(None).prctl(15, name.encode(), 0, 0, 0)  # PR_SET_NAME
+    except Exception:
+        pass
+
+
+def hex_rgb(h):
+    h = h.strip().lstrip("#")
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def mix(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t)
+
+
+def clamp01(v):
+    return 0.0 if v < 0 else 1.0 if v > 1 else v
+
+
+def load_palette():
+    try:
+        with open(THEME, "rb") as f:
+            c = tomllib.load(f)
+    except Exception:
+        c = {}
+    get = lambda k, d: hex_rgb(c.get(k, d))
+    dark = c.get("mode", "dark") != "light"
+    p = {
+        "dark": dark,
+        "magenta": get("magenta", "#bf5af2"),
+        "cyan": get("cyan", "#64d2ff"),
+        "blue": get("blue", "#0a84ff"),
+        "orange": get("orange", "#ff9f0a"),
+        "yellow": get("yellow", "#ffd60a"),
+    }
+    p["grid"] = p["cyan"] if dark else p["magenta"]
+    if dark:
+        p["text_top"], p["text_bot"] = (1, 1, 1), p["cyan"]
+    else:
+        p["text_top"], p["text_bot"] = (.15, .12, .3), p["blue"]
+    return p
+
+
+def hash01(x, y):
+    n = (x * 374761393 + y * 668265263) & 0xFFFFFFFF
+    n = ((n ^ (n >> 13)) * 1274126177) & 0xFFFFFFFF
+    return (n ^ (n >> 16)) / 0xFFFFFFFF
+
+
+def env_float(name):
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return None
+
+
+class Saver:
+    def __init__(self):
+        self.pal = load_palette()
+        self.rng = random.Random()
+        self.t0 = time.monotonic()
+        self.pin_hour = env_float("LG_HOUR")
+        self.speed = env_float("LG_SPEED")
+        self.resize()
+
+    def resize(self):
+        try:
+            sz = os.get_terminal_size(sys.stdout.fileno())
+            self.cols, self.rows = sz.columns, sz.lines
+        except OSError:
+            self.cols, self.rows = 80, 24
+        W, H = self.W, self.H = self.cols, self.rows * 2
+        self.hy = H * .6
+        self.sun_r = H * .2
+        # Mountain silhouette: height above the horizon for every column.
+        rng = self.rng
+        peaks = [(rng.uniform(0, W), rng.uniform(.03, .09) * H, rng.uniform(.08, .2) * W)
+                 for _ in range(7)]
+        self.mountains = [max([h * max(0, 1 - abs(x - px) / w) for px, h, w in peaks] + [0])
+                          + H * .012 * math.sin(x * .7) for x in range(W + 1)]
+        s = min(W, H)
+        self.drops = []
+        for _ in range(max(2, min(4, (W * H) // 4000))):
+            r = rng.uniform(.06, .11) * s
+            self.drops.append([rng.uniform(r, W - r), rng.uniform(r, H - r),
+                               rng.uniform(-1, 1) * .07 * s / FPS, rng.uniform(-1, 1) * .05 * s / FPS, r])
+        self.layout_key = None
+
+    # --- time of day ------------------------------------------------------------
+
+    def hour(self, now, t):
+        h = self.pin_hour if self.pin_hour is not None else now.hour + now.minute / 60 + now.second / 3600
+        if self.speed:
+            h += t * self.speed
+        return h % 24
+
+    def update_sky(self, h):
+        p = self.pal
+        for (h0, z0, l0, s0), (h1, z1, l1, s1) in zip(SKY, SKY[1:]):
+            if h0 <= h <= h1:
+                f = (h - h0) / (h1 - h0)
+                f = f * f * (3 - 2 * f)
+                top, low, stars = mix(z0, z1, f), mix(l0, l1, f), s0 + (s1 - s0) * f
+                break
+        if not p["dark"]:  # pastel take on the same day
+            top, low = mix(top, (1, 1, 1), .45), mix(low, (1, 1, 1), .4)
+            stars *= .3
+        W, hy, R = self.W, self.hy, self.sun_r
+        # Sun is up 6-20, the moon 20-6; both travel left to right.
+        day = 6 <= h <= 20
+        elev = math.sin((h - 6) / 14 * math.pi) if day else -math.sin(((h - 20) % 24) / 10 * math.pi)
+        sun_f, moon_f = (h - 6) / 14, ((h - 20) % 24) / 10
+        arc_x = lambda f: W * (.15 + .7 * f)
+        arc_y = lambda e, r: hy + r * .3 + (r * 1.2 - hy - r * .3) * e
+        self.sky = {
+            "top": top, "low": low, "stars": stars,
+            "sun": (arc_x(sun_f), arc_y(elev, R), elev),
+            "moon": (arc_x(moon_f), arc_y(-elev, R * .55), -elev),
+            "floor": mix(top, (0, 0, 0), .75) if p["dark"] else mix(top, (1, 1, 1), .5),
+            "mountain": mix(low, (0, 0, 0), .72) if p["dark"] else mix(p["blue"], (1, 1, 1), .5),
+            "ridge": mix(p["magenta"], (1, 1, 1), max(0, elev) * .5),
+            "day": clamp01(elev * 2),
+        }
+
+    # --- background: synthwave scene -------------------------------------------
+
+    def background(self, x, y, t):
+        p, sky = self.pal, self.sky
+        W, hy = self.W, self.hy
+        if y < hy:
+            mtop = hy - self.mountains[min(max(int(x), 0), W)]
+            if y >= mtop:
+                col = sky["mountain"]
+                if y - mtop < 1:  # neon ridge line
+                    col = mix(col, sky["ridge"], .7)
+                return mix(col, sky["low"], (y - mtop) / max(hy - mtop, 1) * .35)
+            col = mix(sky["top"], sky["low"], (y / hy) ** 1.6)
+            if sky["stars"] > 0 and y < hy * .8:
+                hsh = hash01(int(x), int(y))
+                if hsh > .985:
+                    tw = .5 + .5 * math.sin(t * 2 + hsh * 900)
+                    col = mix(col, (1, 1, 1), tw * (hsh - .985) / .015 * sky["stars"])
+            col = self.moon(x, y, col)
+            return self.sun(x, y, col, t)
+
+        # Floor: perspective grid scrolling toward the viewer.
+        dy = y - hy + .6
+        wx = (x - W / 2) / dy * 2.4
+        fx = abs(wx - round(wx)) / (2.4 / dy)
+        wz = self.H * .9 / dy + t * 1.4
+        fz = abs(wz - round(wz)) / (self.H * .9 / (dy * dy))
+        # Fade lines out where they crowd closer than a few pixels (no aliasing mush).
+        sp_x, sp_z = dy / 2.4, dy * dy / (self.H * .9)
+        line = (max(0, 1 - fx * 1.1) * min(1, max(0, (sp_x - 3) / 4))
+                + max(0, 1 - fz * 1.1) * min(1, max(0, (sp_z - 1.5) / 3)))
+        near = min(1, dy / (self.H * .12))
+        col = mix(sky["floor"], p["grid"], min(line, 1) * (.35 + .65 * near))
+        haze = math.exp(-dy / (self.H * .04)) * .8
+        return mix(col, sky["low"], haze * (.8 if p["dark"] else .5))
+
+    def sun(self, x, y, col, t):
+        p = self.pal
+        sx, sy, elev = self.sky["sun"]
+        R = self.sun_r
+        dx, dy = x - sx, y - sy
+        d = math.sqrt(dx * dx + dy * dy)
+        if d < R:
+            v = (dy / R + 1) / 2  # 0 top .. 1 bottom
+            low = mix(p["yellow"], p["orange"], v * 1.6) if v < .6 else mix(p["orange"], p["magenta"], (v - .6) / .4)
+            high = mix((1, .98, .85), p["yellow"], v)
+            noon = clamp01(elev * 1.4)
+            # Classic stripe cut-outs near the horizon, sliding down; gone at noon.
+            if v > .3 and noon < .9:
+                band = ((y - sy) / max(3.5, R / 4.5) - t * .5) % 1
+                if band < (v - .3) * 1.1 * (1 - noon):
+                    return col
+            return mix(col, mix(low, high, noon), min((R - d) * 1.5, 1))
+        glow_col = mix(p["magenta"], (1, .95, .8), clamp01(elev * 1.4))
+        glow = math.exp(-(d - R) / (R * .35)) * (.45 if p["dark"] else .25)
+        return mix(col, glow_col, glow)
+
+    def moon(self, x, y, col):
+        mx, my, elev = self.sky["moon"]
+        if elev < -.15:
+            return col
+        r = self.sun_r * .55
+        dx, dy = x - mx, y - my
+        d = math.sqrt(dx * dx + dy * dy)
+        if d < r:
+            ex, ey = dx - r * .45, dy + r * .25  # crescent cut-out
+            if ex * ex + ey * ey < r * r * .8:
+                return col
+            return mix(col, (.92, .92, 1), min((r - d) * 1.5, 1))
+        return mix(col, self.pal["cyan"], math.exp(-(d - r) / (r * .5)) * .18)
+
+    def build_field(self, t):
+        self.grid = [[self.background(x + .5, y + .5, t) for x in range(self.W)] for y in range(self.H)]
+
+    def sample(self, x, y):
+        x = min(max(int(x), 0), self.W - 1)
+        y = min(max(int(y), 0), self.H - 1)
+        return self.grid[y][x]
+
+    # --- glass ------------------------------------------------------------------
+
+    def update_clock(self, now):
+        W, H = self.W, self.H
+        if self.layout_key != (W, H):
+            self.layout_key = (W, H)
+            main_units = sum(len(FONT[c][0]) + 1 for c in "00:00") - 1
+            px = max(1, round(min(H * .17 / 7, W * .45 / (main_units + 2 + 5.5))))
+            ps = max(1, px // 2)
+            tw = main_units * px + 2 * px + 11 * ps
+            pad_x, pad_y = max(3, px * 3), max(3, px * 2)
+            cw, ch = tw + 2 * pad_x, 7 * px + 2 * pad_y
+            cx0 = (W - cw) // 2
+            cy0 = int(self.hy + (H - self.hy - ch) * .4)
+            cy0 -= cy0 % 2  # align to terminal rows
+            self.card = (cx0, cy0, cw, ch, min(ch, cw) * .3)
+            self.px, self.ps, self.tw = px, ps, tw
+            self.text_origin = (cx0 + pad_x, cy0 + pad_y)
+            self.bar_y = cy0 + ch - max(2, pad_y // 2)
+            self.date_row = (cy0 + ch) // 2 + 1
+            self.text_key = None
+
+        key = now.strftime("%H:%M:%S")
+        if key == self.text_key:
+            return
+        self.text_key = key
+        # Pixel map: (x, y) -> (is_colon, gradient 0..1)
+        pix = {}
+        ox, oy = self.text_origin
+        px, ps = self.px, self.ps
+
+        def put(text, x0, y0, s):
+            for c in text:
+                glyph = FONT[c]
+                for gy, line in enumerate(glyph):
+                    for gx, on in enumerate(line):
+                        if on == "1":
+                            for yy in range(s):
+                                for xx in range(s):
+                                    pix[(x0 + gx * s + xx, y0 + gy * s + yy)] = (c == ":", (gy * s + yy) / (7 * s - 1 or 1))
+                x0 += (len(glyph[0]) + 1) * s
+            return x0
+
+        x = put(key[:5], ox, oy, px)
+        put(key[6:], x + px, oy + 7 * px - 7 * ps, ps)  # small seconds, bottom-aligned
+        self.textpix = pix
+        self.date = f"{WEEKDAYS[now.weekday()]} · {now:%d.%m.%Y}"
+
+    def card_sdf(self, x, y):
+        cx0, cy0, cw, ch, rad = self.card
+        qx = abs(x - (cx0 + cw / 2)) - (cw / 2 - rad)
+        qy = abs(y - (cy0 + ch / 2)) - (ch / 2 - rad)
+        return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - rad
+
+    def move_drops(self):
+        for d in self.drops:
+            d[0] += d[2]; d[1] += d[3]
+            if not d[4] < d[0] < self.W - d[4]: d[2] = -d[2]
+            if not d[4] < d[1] < self.H - d[4]: d[3] = -d[3]
+
+    def scene(self, x, y):
+        for dx0, dy0, _, _, R in self.drops:
+            dx, dy = x - dx0, y - dy0
+            d2 = (dx * dx + dy * dy) / (R * R)
+            if d2 < 1:
+                d = math.sqrt(d2)
+                k = .5 + .5 * d2  # magnifying lens
+                r, g, b = self.sample(dx0 + dx * k, dy0 + dy * k)
+                col = (r * 1.1 + .04, g * 1.1 + .04, b * 1.15 + .05)
+                if d > .78:
+                    lit = .5 - .5 * (dx + dy) / (R * d * 1.4142)
+                    col = mix(col, (1, 1, 1), ((d - .78) / .22) ** 2 * (.2 + .6 * lit))
+                hx, hy = dx / R + .4, dy / R + .45
+                if hx * hx + hy * hy < .025:  # hard pixel highlight, retro style
+                    return mix(col, (1, 1, 1), .8)
+                return col
+        return self.sample(x, y)
+
+    def pixel(self, x, y, colon_on, sec_frac):
+        p = self.pal
+        dark = p["dark"]
+        sd = self.card_sdf(x + .5, y + .5)
+        if sd < 0:
+            cx0, cy0, cw, ch, _ = self.card
+            depth = min(-sd / (ch * .35), 1.0)
+            bend = (1 - depth) ** 2 * .3
+            mx, my = cx0 + cw / 2, cy0 + ch / 2
+            col = self.scene(x + (mx - x) * bend, y + (my - y) * bend)
+            col = mix(col, (.12, .09, .2) if dark else (.97, .96, 1), .62)
+            if sd > -1.2:
+                top = 1 - (y - cy0) / ch
+                col = mix(col, (1, 1, 1), .15 + .5 * top)
+            hit = self.textpix.get((x, y))
+            if hit and (colon_on or not hit[0]):
+                return mix(p["text_top"], p["text_bot"], hit[1])  # chrome gradient
+            # Seconds sweep: a neon bar that fills once per minute.
+            ox = self.text_origin[0]
+            if y == self.bar_y and ox <= x < ox + self.tw:
+                pos = (x - ox) / self.tw
+                if pos <= sec_frac:
+                    head = clamp01(1 - (sec_frac - pos) * self.tw / 3)
+                    return mix(p["text_bot"], (1, 1, 1), head)
+                return mix(col, p["text_bot"], .18)
+            sh = self.textpix.get((x - 1, y - 1))  # retro drop shadow
+            if sh and (colon_on or not sh[0]):
+                return mix(col, p["magenta"], .75)
+            return col
+        if sd < 2.5:
+            a = (2.5 - sd) / 2.5 * (.3 if dark else .12)
+            c = self.scene(x, y)
+            return (c[0] * (1 - a), c[1] * (1 - a), c[2] * (1 - a))
+        return self.scene(x, y)
+
+    def post(self, c, x, y):
+        # CRT: scanlines + vignette.
+        nx, ny = x / self.W * 2 - 1, y / self.H * 2 - 1
+        f = ((.8 if self.pal["dark"] else .93) if y & 1 else 1.0) * (1 - .15 * (nx * nx + ny * ny))
+        return (c[0] * f, c[1] * f, c[2] * f)
+
+    def frame(self):
+        t = time.monotonic() - self.t0
+        now = datetime.now()
+        self.update_sky(self.hour(now, t))
+        self.build_field(t)
+        self.move_drops()
+        self.update_clock(now)
+        colon_on = now.microsecond < 500000
+        sec_frac = (now.second + now.microsecond / 1e6) / 60
+        q = lambda v: 255 if v >= 1 else (0 if v <= 0 else int(v * 255))
+        out = ["\x1b[?2026h\x1b[H"]
+        date = self.date
+        dcol0 = (self.cols - len(date)) // 2
+        dcol = self.pal["cyan"] if self.pal["dark"] else self.pal["blue"]
+        for row in range(self.rows):
+            last_f = last_b = None
+            parts = []
+            dated = row == self.date_row
+            for x in range(self.cols):
+                top = self.post(self.pixel(x, row * 2, colon_on, sec_frac), x, row * 2)
+                bot = self.post(self.pixel(x, row * 2 + 1, colon_on, sec_frac), x, row * 2 + 1)
+                if dated and dcol0 <= x < dcol0 + len(date):
+                    c = mix(top, bot, .5)
+                    bk = (q(c[0]), q(c[1]), q(c[2]))
+                    tf = (q(dcol[0]), q(dcol[1]), q(dcol[2]))
+                    ch = date[x - dcol0]
+                else:
+                    tf = (q(top[0]), q(top[1]), q(top[2]))
+                    bk = (q(bot[0]), q(bot[1]), q(bot[2]))
+                    ch = "▀"
+                if tf != last_f:
+                    parts.append("\x1b[38;2;%d;%d;%dm" % tf); last_f = tf
+                if bk != last_b:
+                    parts.append("\x1b[48;2;%d;%d;%dm" % bk); last_b = bk
+                parts.append(ch)
+            out.append("".join(parts))
+            if row < self.rows - 1:
+                out.append("\r\n")
+        out.append("\x1b[0m\x1b[?2026l")
+        return "".join(out)
+
+
+def main():
+    set_process_name("ttfx")
+    saver = Saver()
+    signal.signal(signal.SIGWINCH, lambda *_: saver.resize())
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    signal.signal(signal.SIGHUP, lambda *_: sys.exit(0))
+    out = sys.stdout
+    out.write("\x1b[?25l\x1b[2J")
+    frame_time = 1 / FPS
+    try:
+        while True:
+            start = time.monotonic()
+            out.write(saver.frame())
+            out.flush()
+            time.sleep(max(0.0, frame_time - (time.monotonic() - start)))
+    except (KeyboardInterrupt, OSError, SystemExit):
+        pass
+
+
+if __name__ == "__main__":
+    main()
