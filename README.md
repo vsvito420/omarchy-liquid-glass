@@ -49,6 +49,19 @@ Install it separately (asks for sudo once, for the shim):
 ./screensaver/install.sh --remove  # back to Omarchy's stock screensaver
 ```
 
+### Styles
+
+Pick one in `~/.config/liquid-glass/screensaver.toml` (created on install, kept on updates):
+
+| `style` | What it shows |
+| --- | --- |
+| `retro` (default) | Stylised synthwave day that follows the clock |
+| `sun` | The real sun and moon for your location and date: position, moon phase, and the matching light — night, blue hour, golden hour, daylight. The date line adds sunrise, sunset and the sun's elevation. |
+
+`sun` needs your `latitude` and `longitude` in that file and falls back to `retro`
+without them. The location stays in your local config; nothing is looked up online.
+Sun position uses NOAA's short approximation, accurate to a fraction of a degree.
+
 It runs only while a `liquid-glass-*` theme is applied; with any other theme Omarchy's
 stock screensaver runs as usual. `omarchy toggle screensaver` and the idle timeouts in
 `~/.config/omarchy/shell.json` keep working unchanged.
@@ -63,6 +76,7 @@ passes every other `ttfx` call straight through to `/usr/bin/ttfx`. Nothing in
 omarchy launch screensaver force                   # try it now
 LG_SPEED=1 ~/.local/bin/liquid-glass-screensaver   # whole day as a timelapse, 1 h/s
 LG_HOUR=19 ~/.local/bin/liquid-glass-screensaver   # pin the sky to 19:00
+LG_STYLE=sun LG_DATE=2026-12-21 liquid-glass-screensaver   # try a style / date
 ```
 
 Plain Python 3.11+, no extra packages. Runs in foot, Alacritty, kitty and Ghostty.

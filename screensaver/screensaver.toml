@@ -1,0 +1,10 @@
+# Liquid Glass screensaver settings (~/.config/liquid-glass/screensaver.toml)
+#
+#   style = "retro"  stylised synthwave day that follows the clock
+#   style = "sun"    real sun and moon position and light color for your location
+style = "retro"
+
+# Needed for "sun": your latitude and longitude in degrees (north / east positive).
+# Without them, "sun" falls back to "retro".
+# latitude = 52.52
+# longitude = 13.40

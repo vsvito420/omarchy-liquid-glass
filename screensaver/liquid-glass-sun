@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Liquid Glass screensaver — real sun edition.
+
+Same glass scene as liquid-glass-retro, but the sun and moon sit where they
+really are for your location and date, and the sky takes the matching light:
+night, blue hour, golden hour, daylight. The date line shows sunrise, sunset
+and the current sun elevation.
+
+Sun position: NOAA's short approximation (accurate to a fraction of a degree).
+Moon: correct phase; position approximated as the sun's path shifted by the phase.
+
+Location comes from ~/.config/liquid-glass/screensaver.toml (latitude/longitude).
+Without one, this falls back to the retro screensaver.
+
+Preview helpers: LG_DATE=2026-12-21 picks a day, LG_HOUR=16.5 a time of day,
+LG_SPEED=1 fast-forwards one hour per second.
+"""
+
+import importlib.machinery
+import importlib.util
+import math
+import os
+import tomllib
+from datetime import date, datetime, timedelta, timezone
+
+# Reuse the retro renderer's scene, glass and output.
+_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "liquid-glass-retro")
+_loader = importlib.machinery.SourceFileLoader("liquid_glass_retro", _path)
+retro = importlib.util.module_from_spec(importlib.util.spec_from_loader(_loader.name, _loader))
+_loader.exec_module(retro)
+mix, clamp01 = retro.mix, retro.clamp01
+
+CONFIG = os.path.expanduser("~/.config/liquid-glass/screensaver.toml")
+
+# Sky by sun elevation (degrees): (elevation, zenith, horizon, stars)
+SKY = [
+    (-90, (.005, .005, .02), (.02, .02, .06), 1.0),
+    (-18, (.01, .01, .04), (.04, .04, .10), 1.0),   # astronomical night
+    (-12, (.02, .03, .10), (.10, .10, .25), .8),    # nautical twilight
+    (-6, (.05, .07, .22), (.45, .25, .38), .4),     # blue hour
+    (-2, (.10, .12, .32), (.85, .42, .30), .1),
+    (0, (.14, .18, .42), (.98, .55, .30), 0.0),     # sunrise / sunset
+    (4, (.18, .30, .58), (1.0, .72, .45), 0.0),     # golden hour
+    (10, (.16, .38, .72), (.85, .82, .75), 0.0),
+    (25, (.10, .40, .82), (.62, .78, .95), 0.0),
+    (90, (.06, .36, .85), (.55, .76, .98), 0.0),
+]
+# Sun disc color by elevation: deep orange at the horizon, near-white high up.
+SUN = [(-90, (1, .30, .12)), (1, (1, .38, .16)), (6, (1, .62, .32)),
+       (15, (1, .86, .60)), (40, (1, .97, .88)), (90, (1, .98, .92))]
+
+SYNODIC = 29.530588853
+NEW_MOON = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
+
+
+def interp(table, v):
+    for a, b in zip(table, table[1:]):
+        if a[0] <= v <= b[0]:
+            f = (v - a[0]) / (b[0] - a[0])
+            return tuple(mix(x, y, f) if isinstance(x, tuple) else x + (y - x) * f
+                         for x, y in zip(a[1:], b[1:]))
+    return table[-1][1:]
+
+
+def solar(utc, lat, lon):
+    """(elevation°, azimuth° from north, declination rad, equation of time min)."""
+    hour = utc.hour + utc.minute / 60 + utc.second / 3600
+    g = 2 * math.pi / 365 * (utc.timetuple().tm_yday - 1 + (hour - 12) / 24)
+    eqt = 229.18 * (.000075 + .001868 * math.cos(g) - .032077 * math.sin(g)
+                    - .014615 * math.cos(2 * g) - .040849 * math.sin(2 * g))
+    decl = (.006918 - .399912 * math.cos(g) + .070257 * math.sin(g) - .006758 * math.cos(2 * g)
+            + .000907 * math.sin(2 * g) - .002697 * math.cos(3 * g) + .00148 * math.sin(3 * g))
+    ha = math.radians((hour * 60 + eqt + 4 * lon) / 4 - 180)
+    la = math.radians(lat)
+    cz = math.sin(la) * math.sin(decl) + math.cos(la) * math.cos(decl) * math.cos(ha)
+    elev = 90 - math.degrees(math.acos(max(-1, min(1, cz))))
+    az = math.degrees(math.atan2(math.sin(ha), math.cos(ha) * math.sin(la) - math.tan(decl) * math.cos(la))) + 180
+    return elev, az % 360, decl, eqt
+
+
+def sun_times(day, lat, lon):
+    """Local sunrise and sunset for a date, or None in polar day/night."""
+    noon = datetime(day.year, day.month, day.day, 12, tzinfo=timezone.utc)
+    _, _, decl, eqt = solar(noon, lat, lon)
+    la = math.radians(lat)
+    c = math.cos(math.radians(90.833)) / (math.cos(la) * math.cos(decl)) - math.tan(la) * math.tan(decl)
+    if not -1 <= c <= 1:
+        return None
+    ha = math.degrees(math.acos(c))
+    local = lambda m: (datetime(day.year, day.month, day.day, tzinfo=timezone.utc) + timedelta(minutes=m)).astimezone()
+    return local(720 - 4 * (lon + ha) - eqt), local(720 - 4 * (lon - ha) - eqt)
+
+
+def load_location():
+    try:
+        with open(CONFIG, "rb") as f:
+            c = tomllib.load(f)
+        return float(c["latitude"]), float(c["longitude"])
+    except Exception:
+        return None
+
+
+class SunSaver(retro.Saver):
+    def __init__(self):
+        self.lat, self.lon = load_location()  # main() only builds us with a location
+        pin = os.environ.get("LG_DATE")
+        try:
+            self.pin_date = date.fromisoformat(pin) if pin else None
+        except ValueError:
+            self.pin_date = None
+        self.times_day = None
+        super().__init__()
+
+    def resize(self):
+        super().resize()
+        self.sun_r = self.H * .11
+
+    # The retro frame asks hour() for the sky time; hand it a real datetime instead.
+    def hour(self, now, t):
+        local = now.astimezone()
+        if self.pin_date:
+            local = local.replace(year=self.pin_date.year, month=self.pin_date.month, day=self.pin_date.day)
+        if self.pin_hour is not None:
+            h = self.pin_hour % 24
+            local = local.replace(hour=int(h), minute=int(h % 1 * 60), second=0)
+        if self.speed:
+            local += timedelta(hours=t * self.speed)
+        return local
+
+    def update_sky(self, local):
+        p = self.pal
+        utc = local.astimezone(timezone.utc)
+        elev, az, _, _ = solar(utc, self.lat, self.lon)
+        top, low, stars = interp(SKY, elev)
+        sun_col = interp(SUN, elev)[0]
+        if not p["dark"]:
+            top, low = mix(top, (1, 1, 1), .45), mix(low, (1, 1, 1), .4)
+            stars *= .3
+        # Looking south: east on the left, west on the right.
+        W, hy, R = self.W, self.hy, self.sun_r
+        to_xy = lambda e, a, r: (W / 2 + (a - 180) / 130 * W / 2, hy - e / 70 * (hy - r * 1.3))
+        phase = ((utc - NEW_MOON).total_seconds() / 86400 / SYNODIC) % 1
+        m_elev, m_az, _, _ = solar(utc - timedelta(hours=phase * 24), self.lat, self.lon)
+        day = clamp01(elev / 10)
+        self.sky = {
+            "top": top, "low": low, "stars": stars, "day": day,
+            "sun": (*to_xy(elev, az, R), elev), "sun_col": sun_col,
+            "moon": (*to_xy(m_elev, m_az, R * .6), m_elev), "phase": phase,
+            "floor": mix(top, (0, 0, 0), .75) if p["dark"] else mix(top, (1, 1, 1), .5),
+            "mountain": mix(low, (0, 0, 0), .72) if p["dark"] else mix(p["blue"], (1, 1, 1), .5),
+            "ridge": mix(p["magenta"], sun_col, clamp01((elev + 4) / 12)),
+        }
+        self.sky_elev, self.sky_local = elev, local
+
+    def sun(self, x, y, col, t):
+        sx, sy, elev = self.sky["sun"]
+        if elev < -3:
+            return col
+        R, sc = self.sun_r, self.sky["sun_col"]
+        d = math.hypot(x - sx, y - sy)
+        if d < R:
+            return mix(col, sc, min((R - d) * 1.5, 1))
+        glow = math.exp(-(d - R) / (R * .6)) * .5 + math.exp(-d / (R * 5)) * .18 * self.sky["day"]
+        return mix(col, sc, min(glow, 1))
+
+    def moon(self, x, y, col):
+        mx, my, elev = self.sky["moon"]
+        if elev < -2:
+            return col
+        r = self.sun_r * .6
+        u, v = (x - mx) / r, (y - my) / r
+        d2 = u * u + v * v
+        vis = 1 - .65 * self.sky["day"]
+        if d2 < 1:
+            p = self.sky["phase"]
+            k = math.cos(2 * math.pi * p) * math.sqrt(1 - v * v)
+            lit = u > k if p < .5 else u < -k
+            return mix(col, (.93, .93, 1), (1 if lit else .08) * vis * min((1 - math.sqrt(d2)) * r * 1.5, 1))
+        illum = (1 - math.cos(2 * math.pi * self.sky["phase"])) / 2
+        return mix(col, (.8, .85, 1), math.exp(-(math.sqrt(d2) - 1) * 2) * .15 * illum * vis)
+
+    def update_clock(self, now):
+        old = getattr(self, "text_key", None)
+        super().update_clock(now)
+        if self.text_key == old:
+            return
+        local = self.sky_local
+        if self.times_day != local.date():
+            self.times_day = local.date()
+            self.times = sun_times(self.times_day, self.lat, self.lon)
+        rise_set = f"↑{self.times[0]:%H:%M} ↓{self.times[1]:%H:%M}" if self.times else ""
+        self.date += f" · {rise_set} · {self.sky_elev:+.0f}°"
+
+
+if __name__ == "__main__":
+    if load_location():
+        retro.Saver = SunSaver
+    retro.main()
