@@ -1,0 +1,35 @@
+mode = "light"
+
+# Liquid Glass Warm — parchment/sepia light variant, easy on the eyes
+accent = "#c0602a"
+selection = "#e3c49a"
+muted = "#9a8670"
+
+background = "#ece0c8"
+dark_background = "#e2d4b8"
+darker_background = "#d6c6a6"
+lighter_background = "#f4ead6"
+
+foreground = "#3c2f25"
+dark_foreground = "#7a6452"
+light_foreground = "#54433a"
+bright_foreground = "#2a1f18"
+
+red = "#b3401e"
+yellow = "#9a6a05"
+orange = "#b85a14"
+green = "#66751c"
+cyan = "#3f7f6f"
+blue = "#3e6a8a"
+magenta = "#99486a"
+brown = "#7a5433"
+
+bright_red = "#cc5a35"
+bright_yellow = "#b07d10"
+bright_green = "#7f8f2a"
+bright_cyan = "#4f9282"
+bright_blue = "#4f7fa0"
+bright_magenta = "#b05a7c"
+
+hyprland_active_border = "rgba(fff4e0cc)"
+hyprland_inactive_border = "rgba(fff4e066)"

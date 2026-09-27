@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Omarchy Sepia Web",
+  "version": "1.0.0",
+  "description": "Replaces white page backgrounds with the sepia color of the Liquid Glass Warm theme — only while that Omarchy theme is active.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnYbScNnqWmIAcuCZ+csMw+ErGT+FfBWHul3zg7viAQ0/SmtW1U7Qj1VDKXTJHO7P5NomOcTCVMb3DcdmNpdoB45ppAM8E/NbHMzp9JtkLHv0NNFc39hl7d/GuYMVvTIlsDhaQis4J0n+Bi0ehrsbMqCg3caKmAheiSE8KpS87OcvLTissPm5FyjkP6FIddoNUjd7B/ABJVdHpL4LfIjVPmrWiPV7XPImGG/e7n640E2o5PFzPV7FjnOAJk18ec4FM0QKTUwgpBiPhzmmilcB/8JXCcccGW2KrEppE5Z9ZI3h25zt1vm6dTxALQmBptl0sT2oeSFvZIViQJ45PQusUQIDAQAB",
+  "permissions": ["nativeMessaging", "storage", "alarms"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ]
+}

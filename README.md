@@ -1,12 +1,14 @@
 # Liquid Glass for Omarchy
 
-A macOS / iOS-inspired "liquid glass" theme for [Omarchy](https://omarchy.org), in **dark** and **light**.
+A macOS / iOS-inspired "liquid glass" theme for [Omarchy](https://omarchy.org), in **dark**, **light** and **warm** (a soft sepia light variant that is easy on the eyes).
 
 - Rounded squircle windows with a thin light glass rim and soft shadows
 - Frosted blur behind windows, the bar, menus, notifications and the OSD
 - Translucent terminal backgrounds with crisp text (foot, Alacritty, kitty, Ghostty)
 - Springy, iOS-like window and workspace animations
 - Apple system color palette (accessible high-contrast variants in light mode)
+- Warm variant: parchment background, brown text, terracotta accent and earthy terminal colors
+- Optional browser extension that turns white web pages sepia while the warm variant is active
 - Original gradient wallpapers for both variants, plus a synthwave Omarchy wallpaper in dark
 - Optional screensaver: a drive through a glass landscape under a live 24h sky
 
@@ -19,7 +21,7 @@ A macOS / iOS-inspired "liquid glass" theme for [Omarchy](https://omarchy.org), 
 git clone https://github.com/vsvito420/omarchy-liquid-glass.git
 cd omarchy-liquid-glass
 ./install.sh
-omarchy theme set "Liquid Glass Dark"   # or "Liquid Glass Light"
+omarchy theme set "Liquid Glass Dark"   # or "Liquid Glass Light" / "Liquid Glass Warm"
 ```
 
 > **Why not `omarchy theme install <url>`?** For safety, Omarchy strips `hyprland.lua`
@@ -83,6 +85,26 @@ Plain Python 3.11+, no extra packages. Runs in foot, Alacritty, kitty and Ghostt
 Light on resources: the sky is rendered once per second, overlays only touch their own
 area, and only changed terminal cells are sent — about 13 % of one core and ~230 KB/s
 to the terminal fullscreen at 20 fps.
+
+## Sepia web pages (Chromium / Chrome)
+
+`sepia-web/` is a small extension that replaces white and near-white page backgrounds
+with the warm variant's background color, keeping light-grey shades as slightly darker
+sepia. Images, videos, gradients and dark sites are left alone. It only acts while
+**Liquid Glass Warm** is applied; with any other theme pages look normal.
+
+```bash
+./sepia-web/install.sh   # registers the native messaging host for Chromium / Chrome
+```
+
+Then open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** and
+pick `sepia-web/extension`.
+
+Extensions can't read files, so a tiny native messaging host (`sepia-web/host/sepia-host.py`,
+plain Python, no packages) reports the active theme name and its background color from
+`~/.local/state/omarchy/current/`. No sudo, no browser policies. After a theme change the
+extension picks it up as soon as you switch tabs or focus the browser, otherwise within 30 s.
+Add more theme names to `SEPIA_THEMES` in `sepia-web/extension/background.js`.
 
 ## Tweaking
 
