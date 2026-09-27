@@ -7,7 +7,7 @@ A macOS / iOS-inspired "liquid glass" theme for [Omarchy](https://omarchy.org), 
 - Translucent terminal backgrounds with crisp text (foot, Alacritty, kitty, Ghostty)
 - Springy, iOS-like window and workspace animations
 - Apple system color palette (accessible high-contrast variants in light mode)
-- Three original gradient wallpapers per variant
+- Original gradient wallpapers for both variants, plus a synthwave Omarchy wallpaper in dark
 
 ![Dark wallpapers](screenshots/dark-wallpapers.jpg)
 ![Light wallpapers](screenshots/light-wallpapers.jpg)
