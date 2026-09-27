@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Liquid Glass screensaver for Omarchy — retro edition.
 
-A synthwave scene (striped sun behind mountains, neon perspective grid, stars)
-seen through liquid-glass droplets and a frosted glass card holding a chunky
-pixel clock, finished with CRT scanlines. The sky follows the real 24h day:
-sunrise, blue noon, synthwave sunset, moon and stars at night. Truecolor
-half-block pixels; accent colors come from the active Omarchy theme
+A night drive through a glass landscape: a wet glass road curving toward the
+horizon, frosted-glass mountains sliding past in parallax, glowing glass posts
+along the roadside, raindrops running down the windshield, and a frosted clock
+card in the sky. The sky follows the clock through a stylised 24h day (sunrise,
+blue noon, synthwave sunset, moon and stars). Truecolor half-block pixels;
+accent colors come from the active Omarchy theme
 (~/.local/state/omarchy/current/theme/colors.toml).
+
+Cheap by design: the sky is rendered once per second, overlays only touch their
+own bounding boxes, and only terminal cells that changed are sent.
 
 Runs until killed. Never reads stdin, so the stock omarchy-screensaver loop can
 keep watching for keypresses while this draws.
@@ -25,8 +29,13 @@ import time
 import tomllib
 from datetime import datetime
 
-FPS = 24
+FPS = 20
 THEME = os.path.expanduser("~/.local/state/omarchy/current/theme/colors.toml")
+
+DRIVE_SPEED = 9.0  # world units per second
+ZC = 4.0           # world distance of the bottom screen row
+SEG = 2.0          # length of one road stripe band
+POST_GAP = 7.0     # distance between roadside posts
 
 WEEKDAYS = ["MONTAG", "DIENSTAG", "MITTWOCH", "DONNERSTAG", "FREITAG", "SAMSTAG", "SONNTAG"]
 
@@ -97,7 +106,7 @@ def load_palette():
         "orange": get("orange", "#ff9f0a"),
         "yellow": get("yellow", "#ffd60a"),
     }
-    p["grid"] = p["cyan"] if dark else p["magenta"]
+    p["accent"] = p["cyan"] if dark else p["blue"]
     if dark:
         p["text_top"], p["text_bot"] = (1, 1, 1), p["cyan"]
     else:
@@ -134,21 +143,20 @@ class Saver:
         except OSError:
             self.cols, self.rows = 80, 24
         W, H = self.W, self.H = self.cols, self.rows * 2
-        self.hy = H * .6
-        self.sun_r = H * .2
-        # Mountain silhouette: height above the horizon for every column.
-        rng = self.rng
-        peaks = [(rng.uniform(0, W), rng.uniform(.03, .09) * H, rng.uniform(.08, .2) * W)
-                 for _ in range(7)]
-        self.mountains = [max([h * max(0, 1 - abs(x - px) / w) for px, h, w in peaks] + [0])
-                          + H * .012 * math.sin(x * .7) for x in range(W + 1)]
-        s = min(W, H)
-        self.drops = []
-        for _ in range(max(2, min(4, (W * H) // 4000))):
-            r = rng.uniform(.06, .11) * s
-            self.drops.append([rng.uniform(r, W - r), rng.uniform(r, H - r),
-                               rng.uniform(-1, 1) * .07 * s / FPS, rng.uniform(-1, 1) * .05 * s / FPS, r])
+        self.hy = H * .58
+        self.hyi = int(self.hy) + 1  # first ground row
+        self.sun_r = H * .16
+        self.pan = self.dist = 0.0
+        self.last_t = None
+        self.sky_buf = None
+        self.sky_at = -1e9
+        self.prev = None  # force a full redraw
         self.layout_key = None
+        self.drops = [self.new_drop(anywhere=True) for _ in range(max(3, min(6, W * H // 2000)))]
+        # CRT scanlines + vignette, folded into one factor per pixel.
+        scan = .9 if self.pal["dark"] else .95
+        self.pf = [(scan if y & 1 else 1.0) * (1 - .12 * ((x / W * 2 - 1) ** 2 + (y / H * 2 - 1) ** 2))
+                   for y in range(H) for x in range(W)]
 
     # --- time of day ------------------------------------------------------------
 
@@ -175,52 +183,52 @@ class Saver:
         elev = math.sin((h - 6) / 14 * math.pi) if day else -math.sin(((h - 20) % 24) / 10 * math.pi)
         sun_f, moon_f = (h - 6) / 14, ((h - 20) % 24) / 10
         arc_x = lambda f: W * (.15 + .7 * f)
-        arc_y = lambda e, r: hy + r * .3 + (r * 1.2 - hy - r * .3) * e
+        arc_y = lambda e, r: self.sky_y(e * 66, r)
         self.sky = {
             "top": top, "low": low, "stars": stars,
             "sun": (arc_x(sun_f), arc_y(elev, R), elev),
+            "sun_col": mix(p["orange"], (1, .95, .8), clamp01(elev * 1.4)),
             "moon": (arc_x(moon_f), arc_y(-elev, R * .55), -elev),
-            "floor": mix(top, (0, 0, 0), .75) if p["dark"] else mix(top, (1, 1, 1), .5),
-            "mountain": mix(low, (0, 0, 0), .72) if p["dark"] else mix(p["blue"], (1, 1, 1), .5),
-            "ridge": mix(p["magenta"], (1, 1, 1), max(0, elev) * .5),
             "day": clamp01(elev * 2),
         }
 
-    # --- background: synthwave scene -------------------------------------------
+    def sky_y(self, elev, r):
+        """Screen y for a body at this elevation (degrees): rises from the mountain
+        ridge, tops out just below the clock card, sinks behind the ridge below 0°."""
+        ridge, peak = self.hy - self.H * .08, self.H * .3
+        if elev < 0:
+            return ridge - elev * r * .4
+        return ridge - min(elev, 66) / 66 * (ridge - peak)
 
-    def background(self, x, y, t):
-        p, sky = self.pal, self.sky
-        W, hy = self.W, self.hy
-        if y < hy:
-            mtop = hy - self.mountains[min(max(int(x), 0), W)]
-            if y >= mtop:
-                col = sky["mountain"]
-                if y - mtop < 1:  # neon ridge line
-                    col = mix(col, sky["ridge"], .7)
-                return mix(col, sky["low"], (y - mtop) / max(hy - mtop, 1) * .35)
-            col = mix(sky["top"], sky["low"], (y / hy) ** 1.6)
-            if sky["stars"] > 0 and y < hy * .8:
-                hsh = hash01(int(x), int(y))
-                if hsh > .985:
-                    tw = .5 + .5 * math.sin(t * 2 + hsh * 900)
-                    col = mix(col, (1, 1, 1), tw * (hsh - .985) / .015 * sky["stars"])
-            col = self.moon(x, y, col)
-            return self.sun(x, y, col, t)
+    def derive_colors(self):
+        """Landscape colors follow the sky's light."""
+        s, p = self.sky, self.pal
+        top, low = s["top"], s["low"]
+        if p["dark"]:
+            ground = mix(mix(top, low, .3), (0, 0, 0), .5)
+            road = mix(mix(top, low, .5), (0, 0, 0), .72)
+            s["far"] = mix(mix(top, low, .6), (0, 0, 0), .35)
+            s["near"] = mix(top, (0, 0, 0), .45)
+        else:
+            ground = mix(mix(top, low, .3), (1, 1, 1), .15)
+            road = mix(mix(top, low, .5), (.25, .25, .35), .45)
+            s["far"] = mix(mix(top, low, .6), (.6, .6, .75), .4)
+            s["near"] = mix(top, (.35, .4, .6), .45)
+        s["ground"], s["ground2"] = ground, mix(ground, s["low"], .18)
+        s["road"], s["road2"] = road, mix(road, (1, 1, 1), .05)
+        s["lamp"] = .35 + .65 * (1 - s["day"])
 
-        # Floor: perspective grid scrolling toward the viewer.
-        dy = y - hy + .6
-        wx = (x - W / 2) / dy * 2.4
-        fx = abs(wx - round(wx)) / (2.4 / dy)
-        wz = self.H * .9 / dy + t * 1.4
-        fz = abs(wz - round(wz)) / (self.H * .9 / (dy * dy))
-        # Fade lines out where they crowd closer than a few pixels (no aliasing mush).
-        sp_x, sp_z = dy / 2.4, dy * dy / (self.H * .9)
-        line = (max(0, 1 - fx * 1.1) * min(1, max(0, (sp_x - 3) / 4))
-                + max(0, 1 - fz * 1.1) * min(1, max(0, (sp_z - 1.5) / 3)))
-        near = min(1, dy / (self.H * .12))
-        col = mix(sky["floor"], p["grid"], min(line, 1) * (.35 + .65 * near))
-        haze = math.exp(-dy / (self.H * .04)) * .8
-        return mix(col, sky["low"], haze * (.8 if p["dark"] else .5))
+    # --- sky (rendered once per second) -----------------------------------------
+
+    def sky_pixel(self, x, y, t):
+        sky = self.sky
+        col = mix(sky["top"], sky["low"], (y / self.hy) ** 1.6)
+        if sky["stars"] > 0 and y < self.hy * .8:
+            hsh = hash01(int(x), int(y))
+            if hsh > .985:
+                tw = .5 + .5 * math.sin(t * 2 + hsh * 900)
+                col = mix(col, (1, 1, 1), tw * (hsh - .985) / .015 * sky["stars"])
+        return self.sun(x, y, self.moon(x, y, col), t)
 
     def sun(self, x, y, col, t):
         p = self.pal
@@ -233,9 +241,9 @@ class Saver:
             low = mix(p["yellow"], p["orange"], v * 1.6) if v < .6 else mix(p["orange"], p["magenta"], (v - .6) / .4)
             high = mix((1, .98, .85), p["yellow"], v)
             noon = clamp01(elev * 1.4)
-            # Classic stripe cut-outs near the horizon, sliding down; gone at noon.
+            # Classic stripe cut-outs near the horizon; gone at noon.
             if v > .3 and noon < .9:
-                band = ((y - sy) / max(3.5, R / 4.5) - t * .5) % 1
+                band = ((y - sy) / max(3.5, R / 4.5)) % 1
                 if band < (v - .3) * 1.1 * (1 - noon):
                     return col
             return mix(col, mix(low, high, noon), min((R - d) * 1.5, 1))
@@ -257,28 +265,155 @@ class Saver:
             return mix(col, (.92, .92, 1), min((r - d) * 1.5, 1))
         return mix(col, self.pal["cyan"], math.exp(-(d - r) / (r * .5)) * .18)
 
-    def build_field(self, t):
-        self.grid = [[self.background(x + .5, y + .5, t) for x in range(self.W)] for y in range(self.H)]
+    def refresh_sky(self, now, t):
+        self.update_sky(self.hour(now, t))
+        self.derive_colors()
+        W = self.W
+        self.sky_buf = [self.sky_pixel(x + .5, y + .5, t) for y in range(self.hyi) for x in range(W)]
 
-    def sample(self, x, y):
-        x = min(max(int(x), 0), self.W - 1)
-        y = min(max(int(y), 0), self.H - 1)
-        return self.grid[y][x]
+    # --- landscape (every frame) --------------------------------------------------
 
-    # --- glass ------------------------------------------------------------------
+    def road_at(self, p):
+        """Road center and half width on the row at perspective factor p (0 horizon, 1 bottom)."""
+        return self.W / 2 + self.curve * self.W * .32 * (1 - p) ** 2, self.W * .42 * p
+
+    def ground(self):
+        W, H, hy, sky = self.W, self.H, self.hy, self.sky
+        G = H - hy
+        low, accent = sky["low"], self.pal["accent"]
+        white = (.95, .96, 1)
+        sx, _, s_elev = sky["sun"]
+        refl_on = s_elev > -.05
+        sun_col = sky["sun_col"]
+        out = []
+        for y in range(self.hyi, H):
+            dy = y + .5 - hy
+            p = dy / G
+            band = int((ZC / p + self.dist) / SEG) & 1
+            contrast = clamp01((SEG * p * p * G / ZC - 1) / 2)  # fade bands thinner than ~1px
+            b = band * contrast
+            ground = mix(sky["ground"], sky["ground2"], b)
+            road = mix(mix(sky["road"], sky["road2"], b), low, .25 * (1 - p) ** 2)
+            edge = mix(mix(road, white, .5), white if band else accent, contrast)
+            dash = band == 0 and contrast > .3
+            cx, hw = self.road_at(p)
+            rumble, lane = hw * .9, max(.45, hw * .022)
+            haze = math.exp(-dy / (H * .045))
+            refl = .45 * (1 - p * .6) if refl_on else 0
+            rw = 1 + hw * .06
+            for x in range(W):
+                ax = abs(x + .5 - cx)
+                if ax < hw:
+                    if ax > rumble:
+                        c = edge
+                    elif ax < lane and dash:
+                        c = white
+                    else:
+                        c = road
+                        dx = abs(x + .5 - sx)
+                        if refl and dx < rw * 3:  # sun glinting on the wet road
+                            c = mix(c, sun_col, refl * math.exp(-dx / rw))
+                else:
+                    c = ground
+                if haze > .02:
+                    c = mix(c, low, haze)
+                out.append(c)
+        return out
+
+    def draw_mountains(self, buf):
+        W, H, hy, hyi, sky = self.W, self.H, self.hy, self.hyi, self.sky
+        far, near = sky["far"], sky["near"]
+        pf, pn = self.pan * W * .25, self.pan * W * .7
+        sin = math.sin
+        for x in range(W):
+            uf, un = x + pf, x + pn
+            top_f = hy - H * (.1 + .045 * sin(uf * .04 + 1) + .025 * sin(uf * .11 + 2) + .01 * sin(uf * .29))
+            top_n = hy - H * (.045 + .04 * abs(sin(un * .055)) + .015 * sin(un * .17 + 1))
+            for y in range(max(0, int(top_f)), hyi):
+                i = y * W + x
+                c = mix(buf[i], far, .85)
+                if y - top_f < 1:
+                    c = mix(c, (1, 1, 1), .12)
+                if y >= top_n:  # frosted glass range in front, lit along the ridge
+                    e = y - top_n
+                    c = mix(mix(c, near, .6), (1, 1, 1), .14 * max(0, 1 - e / 4))
+                    if e < 1.5:
+                        c = mix(c, (1, 1, 1), .55 - e * .3)
+                buf[i] = c
+
+    def draw_posts(self, buf):
+        W, H, hy = self.W, self.H, self.hy
+        G = H - hy
+        lamp = mix(self.pal["accent"], (1, 1, 1), .45)
+        glow = self.sky["lamp"]
+        k = int((self.dist + ZC * 30) / POST_GAP)
+        while True:  # far to near
+            D = k * POST_GAP - self.dist
+            if D < ZC * .75:
+                break
+            k -= 1
+            p = ZC / D
+            base = hy + p * G
+            cx, hw = self.road_at(p)
+            h, w = p * H * .38, max(1.0, p * W * .016)
+            cap = max(1.0, w * .9)
+            for side in (-1, 1):
+                x0 = cx + side * hw * 1.12
+                xa, xb = int(x0 - w / 2), int(x0 + w / 2) + 1
+                ya, yb = int(base - h), int(base)
+                for y in range(max(0, ya), min(H, yb)):
+                    row = y * W
+                    for x in range(max(0, xa), min(W, xb)):
+                        c = buf[row + x]
+                        if y < ya + cap:  # glowing lamp head
+                            c = mix(c, lamp, .35 + .6 * glow)
+                        else:
+                            c = mix(c, (.75, .85, 1), .22)
+                            if x == xa:
+                                c = mix(c, (1, 1, 1), .35)
+                        buf[row + x] = c
+                # soft halo around the lamp at night
+                if glow > .4 and p > .12:
+                    r = cap * 2.2
+                    ly = ya + cap / 2
+                    for y in range(max(0, int(ly - r)), min(H, int(ly + r) + 1)):
+                        for x in range(max(0, int(x0 - r)), min(W, int(x0 + r) + 1)):
+                            d = math.hypot(x + .5 - x0, y + .5 - ly) / r
+                            if .45 < d < 1:
+                                i = y * W + x
+                                buf[i] = mix(buf[i], lamp, (1 - d) * .35 * glow)
+
+    # --- windshield drops -------------------------------------------------------
+
+    def new_drop(self, anywhere=False):
+        rng, s = self.rng, min(self.W, self.H)
+        r = rng.uniform(.035, .07) * s
+        y = rng.uniform(r, self.H - r) if anywhere else -r
+        return [rng.uniform(r, self.W - r), y, rng.uniform(.4, 2.5), r, rng.uniform(0, 6.28)]
+
+    def move_drops(self, dt):
+        for i, d in enumerate(self.drops):
+            d[1] += d[2] * dt
+            d[4] += dt
+            if self.rng.random() < dt * .15:  # now and then a drop lets go and runs
+                d[2] = min(d[2] * 3, 12)
+            if d[1] - d[3] > self.H:
+                self.drops[i] = self.new_drop()
+
+    # --- clock --------------------------------------------------------------------
 
     def update_clock(self, now):
         W, H = self.W, self.H
         if self.layout_key != (W, H):
             self.layout_key = (W, H)
             main_units = sum(len(FONT[c][0]) + 1 for c in "00:00") - 1
-            px = max(1, round(min(H * .17 / 7, W * .45 / (main_units + 2 + 5.5))))
+            px = max(1, round(min(H * .15 / 7, W * .4 / (main_units + 2 + 5.5))))
             ps = max(1, px // 2)
             tw = main_units * px + 2 * px + 11 * ps
             pad_x, pad_y = max(3, px * 3), max(3, px * 2)
             cw, ch = tw + 2 * pad_x, 7 * px + 2 * pad_y
             cx0 = (W - cw) // 2
-            cy0 = int(self.hy + (H - self.hy - ch) * .4)
+            cy0 = int(H * .08)
             cy0 -= cy0 % 2  # align to terminal rows
             self.card = (cx0, cy0, cw, ch, min(ch, cw) * .3)
             self.px, self.ps, self.tw = px, ps, tw
@@ -319,111 +454,126 @@ class Saver:
         qy = abs(y - (cy0 + ch / 2)) - (ch / 2 - rad)
         return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - rad
 
-    def move_drops(self):
-        for d in self.drops:
-            d[0] += d[2]; d[1] += d[3]
-            if not d[4] < d[0] < self.W - d[4]: d[2] = -d[2]
-            if not d[4] < d[1] < self.H - d[4]: d[3] = -d[3]
+    # --- glass overlays (bounding boxes only) -----------------------------------
 
-    def scene(self, x, y):
-        for dx0, dy0, _, _, R in self.drops:
-            dx, dy = x - dx0, y - dy0
-            d2 = (dx * dx + dy * dy) / (R * R)
-            if d2 < 1:
-                d = math.sqrt(d2)
-                k = .5 + .5 * d2  # magnifying lens
-                r, g, b = self.sample(dx0 + dx * k, dy0 + dy * k)
-                col = (r * 1.1 + .04, g * 1.1 + .04, b * 1.15 + .05)
-                if d > .78:
-                    lit = .5 - .5 * (dx + dy) / (R * d * 1.4142)
-                    col = mix(col, (1, 1, 1), ((d - .78) / .22) ** 2 * (.2 + .6 * lit))
-                hx, hy = dx / R + .4, dy / R + .45
-                if hx * hx + hy * hy < .025:  # hard pixel highlight, retro style
-                    return mix(col, (1, 1, 1), .8)
-                return col
-        return self.sample(x, y)
+    def overlay(self, buf, now):
+        W, H = self.W, self.H
+        out = buf[:]
+        at = lambda src, x, y: src[min(max(int(y), 0), H - 1) * W + min(max(int(x), 0), W - 1)]
 
-    def pixel(self, x, y, colon_on, sec_frac):
-        p = self.pal
-        dark = p["dark"]
-        sd = self.card_sdf(x + .5, y + .5)
-        if sd < 0:
-            cx0, cy0, cw, ch, _ = self.card
-            depth = min(-sd / (ch * .35), 1.0)
-            bend = (1 - depth) ** 2 * .3
-            mx, my = cx0 + cw / 2, cy0 + ch / 2
-            col = self.scene(x + (mx - x) * bend, y + (my - y) * bend)
-            col = mix(col, (.12, .09, .2) if dark else (.97, .96, 1), .62)
-            if sd > -1.2:
-                top = 1 - (y - cy0) / ch
-                col = mix(col, (1, 1, 1), .15 + .5 * top)
-            hit = self.textpix.get((x, y))
-            if hit and (colon_on or not hit[0]):
-                return mix(p["text_top"], p["text_bot"], hit[1])  # chrome gradient
-            # Seconds sweep: a neon bar that fills once per minute.
-            ox = self.text_origin[0]
-            if y == self.bar_y and ox <= x < ox + self.tw:
-                pos = (x - ox) / self.tw
-                if pos <= sec_frac:
-                    head = clamp01(1 - (sec_frac - pos) * self.tw / 3)
-                    return mix(p["text_bot"], (1, 1, 1), head)
-                return mix(col, p["text_bot"], .18)
-            sh = self.textpix.get((x - 1, y - 1))  # retro drop shadow
-            if sh and (colon_on or not sh[0]):
-                return mix(col, p["magenta"], .75)
-            return col
-        if sd < 2.5:
-            a = (2.5 - sd) / 2.5 * (.3 if dark else .12)
-            c = self.scene(x, y)
-            return (c[0] * (1 - a), c[1] * (1 - a), c[2] * (1 - a))
-        return self.scene(x, y)
+        for dx0, dy0, _, R, _ in self.drops:
+            for y in range(max(0, int(dy0 - R)), min(H, int(dy0 + R) + 1)):
+                for x in range(max(0, int(dx0 - R)), min(W, int(dx0 + R) + 1)):
+                    dx, dy = x + .5 - dx0, y + .5 - dy0
+                    d2 = (dx * dx + dy * dy) / (R * R)
+                    if d2 >= 1:
+                        continue
+                    k = -.8 + .3 * d2  # real droplets flip the view
+                    r, g, b = at(buf, dx0 + dx * k, dy0 + dy * k)
+                    c = (r * 1.08 + .03, g * 1.08 + .03, b * 1.12 + .04)
+                    d = math.sqrt(d2)
+                    if d > .75:  # rim: bright where light enters at the bottom
+                        c = mix(c, (1, 1, 1), ((d - .75) / .25) ** 2 * (.15 + .45 * clamp01(dy / R + .5)))
+                    hx, hy = dx / R + .35, dy / R + .45
+                    if hx * hx + hy * hy < .03:
+                        c = mix(c, (1, 1, 1), .8)
+                    out[y * W + x] = c
 
-    def post(self, c, x, y):
-        # CRT: scanlines + vignette.
-        nx, ny = x / self.W * 2 - 1, y / self.H * 2 - 1
-        f = ((.8 if self.pal["dark"] else .93) if y & 1 else 1.0) * (1 - .15 * (nx * nx + ny * ny))
-        return (c[0] * f, c[1] * f, c[2] * f)
+        scene = out[:]
+        p, dark = self.pal, self.pal["dark"]
+        cx0, cy0, cw, ch, _ = self.card
+        mx, my = cx0 + cw / 2, cy0 + ch / 2
+        frost = (.12, .09, .2) if dark else (.97, .96, 1)
+        colon_on = now.microsecond < 500000
+        sec_frac = (now.second + now.microsecond / 1e6) / 60
+        ox = self.text_origin[0]
+        for y in range(max(0, cy0 - 3), min(H, int(cy0 + ch) + 4)):
+            for x in range(max(0, cx0 - 3), min(W, int(cx0 + cw) + 4)):
+                sd = self.card_sdf(x + .5, y + .5)
+                i = y * W + x
+                if sd >= 0:
+                    if sd < 2.5:  # soft shadow
+                        a = (2.5 - sd) / 2.5 * (.3 if dark else .12)
+                        c = scene[i]
+                        out[i] = (c[0] * (1 - a), c[1] * (1 - a), c[2] * (1 - a))
+                    continue
+                bend = (1 - min(-sd / (ch * .35), 1.0)) ** 2 * .3  # liquid edge
+                c = mix(at(scene, x + (mx - x) * bend, y + (my - y) * bend), frost, .62)
+                if sd > -1.2:
+                    c = mix(c, (1, 1, 1), .15 + .5 * (1 - (y - cy0) / ch))
+                hit = self.textpix.get((x, y))
+                if hit and (colon_on or not hit[0]):
+                    c = mix(p["text_top"], p["text_bot"], hit[1])  # chrome gradient
+                elif y == self.bar_y and ox <= x < ox + self.tw:  # seconds sweep
+                    pos = (x - ox) / self.tw
+                    if pos <= sec_frac:
+                        c = mix(p["text_bot"], (1, 1, 1), clamp01(1 - (sec_frac - pos) * self.tw / 3))
+                    else:
+                        c = mix(c, p["text_bot"], .18)
+                else:
+                    sh = self.textpix.get((x - 1, y - 1))  # retro drop shadow
+                    if sh and (colon_on or not sh[0]):
+                        c = mix(c, p["magenta"], .75)
+                out[i] = c
+        return out
+
+    # --- output -----------------------------------------------------------------
+
+    def emit(self, px):
+        """Half-block cells; only cells that changed since the last frame are sent."""
+        W, pf = self.W, self.pf
+        date, dcol0 = self.date, (self.cols - len(self.date)) // 2
+        dc = self.pal["cyan"] if self.pal["dark"] else self.pal["blue"]
+        q = lambda v: 255 if v >= 1 else (0 if v <= 0 else int(v * 255) & 0xFC)
+        dq = (q(dc[0]), q(dc[1]), q(dc[2]))
+        prev = self.prev
+        cells = []
+        out = ["\x1b[?2026h"]
+        last_f = last_b = None
+        for row in range(self.rows):
+            i0, i1 = row * 2 * W, (row * 2 + 1) * W
+            dated = row == self.date_row
+            cursor = -1
+            for x in range(W):
+                a, fa, b, fb = px[i0 + x], pf[i0 + x], px[i1 + x], pf[i1 + x]
+                if dated and dcol0 <= x < dcol0 + len(date):
+                    cell = (dq, (q((a[0] * fa + b[0] * fb) / 2), q((a[1] * fa + b[1] * fb) / 2), q((a[2] * fa + b[2] * fb) / 2)), date[x - dcol0])
+                else:
+                    cell = ((q(a[0] * fa), q(a[1] * fa), q(a[2] * fa)), (q(b[0] * fb), q(b[1] * fb), q(b[2] * fb)), "▀")
+                cells.append(cell)
+                if prev is not None and prev[len(cells) - 1] == cell:
+                    continue
+                if cursor != x:
+                    out.append("\x1b[%d;%dH" % (row + 1, x + 1))
+                tf, bk, ch = cell
+                if tf != last_f:
+                    out.append("\x1b[38;2;%d;%d;%dm" % tf); last_f = tf
+                if bk != last_b:
+                    out.append("\x1b[48;2;%d;%d;%dm" % bk); last_b = bk
+                out.append(ch)
+                cursor = x + 1
+        self.prev = cells
+        out.append("\x1b[?2026l")
+        return "".join(out)
 
     def frame(self):
         t = time.monotonic() - self.t0
+        dt = min(t - self.last_t, .2) if self.last_t is not None else 0.0
+        self.last_t = t
         now = datetime.now()
-        self.update_sky(self.hour(now, t))
-        self.build_field(t)
-        self.move_drops()
+        if self.sky_buf is None or t - self.sky_at >= (.25 if self.speed else 1.0):
+            self.sky_at = t
+            self.refresh_sky(now, t)
+        # Drive: slow curves, mountains pan against them.
+        self.curve = .55 * math.sin(t * .045) + .3 * math.sin(t * .017 + 1)
+        self.pan += self.curve * dt * .12
+        self.dist += dt * DRIVE_SPEED
+        buf = self.sky_buf + self.ground()
+        self.draw_mountains(buf)
+        self.draw_posts(buf)
+        self.move_drops(dt)
         self.update_clock(now)
-        colon_on = now.microsecond < 500000
-        sec_frac = (now.second + now.microsecond / 1e6) / 60
-        q = lambda v: 255 if v >= 1 else (0 if v <= 0 else int(v * 255))
-        out = ["\x1b[?2026h\x1b[H"]
-        date = self.date
-        dcol0 = (self.cols - len(date)) // 2
-        dcol = self.pal["cyan"] if self.pal["dark"] else self.pal["blue"]
-        for row in range(self.rows):
-            last_f = last_b = None
-            parts = []
-            dated = row == self.date_row
-            for x in range(self.cols):
-                top = self.post(self.pixel(x, row * 2, colon_on, sec_frac), x, row * 2)
-                bot = self.post(self.pixel(x, row * 2 + 1, colon_on, sec_frac), x, row * 2 + 1)
-                if dated and dcol0 <= x < dcol0 + len(date):
-                    c = mix(top, bot, .5)
-                    bk = (q(c[0]), q(c[1]), q(c[2]))
-                    tf = (q(dcol[0]), q(dcol[1]), q(dcol[2]))
-                    ch = date[x - dcol0]
-                else:
-                    tf = (q(top[0]), q(top[1]), q(top[2]))
-                    bk = (q(bot[0]), q(bot[1]), q(bot[2]))
-                    ch = "▀"
-                if tf != last_f:
-                    parts.append("\x1b[38;2;%d;%d;%dm" % tf); last_f = tf
-                if bk != last_b:
-                    parts.append("\x1b[48;2;%d;%d;%dm" % bk); last_b = bk
-                parts.append(ch)
-            out.append("".join(parts))
-            if row < self.rows - 1:
-                out.append("\r\n")
-        out.append("\x1b[0m\x1b[?2026l")
-        return "".join(out)
+        return self.emit(self.overlay(buf, now))
 
 
 def main():

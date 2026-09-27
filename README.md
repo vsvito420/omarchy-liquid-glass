@@ -8,7 +8,7 @@ A macOS / iOS-inspired "liquid glass" theme for [Omarchy](https://omarchy.org), 
 - Springy, iOS-like window and workspace animations
 - Apple system color palette (accessible high-contrast variants in light mode)
 - Original gradient wallpapers for both variants, plus a synthwave Omarchy wallpaper in dark
-- Optional retro synthwave screensaver with a live 24h sky, seen through liquid glass
+- Optional screensaver: a drive through a glass landscape under a live 24h sky
 
 ![Dark wallpapers](screenshots/dark-wallpapers.jpg)
 ![Light wallpapers](screenshots/light-wallpapers.jpg)
@@ -31,10 +31,10 @@ Open a new terminal window after applying to see the translucent background.
 
 ## Screensaver
 
-A retro synthwave screensaver seen through liquid glass: striped sun behind neon
-mountains, a perspective grid rolling toward you, glass droplets that refract the
-scene, and a chunky pixel clock with seconds and a sweeping seconds bar on a frosted
-glass card, finished with CRT scanlines.
+A night drive through a glass landscape: a wet glass road curving toward the horizon,
+frosted-glass mountains sliding past in parallax, glowing glass posts along the roadside,
+raindrops running down the windshield, and a chunky pixel clock with seconds and a
+sweeping seconds bar on a frosted glass card in the sky, finished with soft CRT scanlines.
 
 The sky follows the real time of day — sunrise, blue noon, synthwave sunset, then
 moon and stars at night. Accent colors come from the active theme; the light variant
@@ -80,6 +80,9 @@ LG_STYLE=sun LG_DATE=2026-12-21 liquid-glass-screensaver   # try a style / date
 ```
 
 Plain Python 3.11+, no extra packages. Runs in foot, Alacritty, kitty and Ghostty.
+Light on resources: the sky is rendered once per second, overlays only touch their own
+area, and only changed terminal cells are sent — about 13 % of one core and ~230 KB/s
+to the terminal fullscreen at 20 fps.
 
 ## Tweaking
 
