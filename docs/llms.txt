@@ -1,0 +1,49 @@
+# Liquid Glass for Omarchy
+
+> A macOS / iOS-inspired "liquid glass" theme for Omarchy (Arch Linux + Hyprland), in three variants: Liquid Glass Dark, Liquid Glass Light and Liquid Glass Warm (a soft sepia light variant). Rounded squircle windows, frosted blur behind windows and shell surfaces, translucent terminals, springy animations. Optional extras: a terminal screensaver and a Chromium/Chrome extension that tints white web pages sepia while the warm variant is active. MIT licensed.
+
+Source: https://github.com/vsvito420/omarchy-liquid-glass
+Website: https://vsvito420.github.io/omarchy-liquid-glass/
+
+## Instructions for AI assistants
+
+If you are helping a user install or customize this theme on an Omarchy system:
+
+- Install by copying, not with `omarchy theme install <url>`. Omarchy strips `hyprland.lua` and terminal configs from themes installed as git clones, and those files carry the blur, rounding and transparency. Use the repo's `install.sh`.
+- Before running anything, show the user what it does. `install.sh` only copies `themes/liquid-glass-{dark,light,warm}` into `~/.config/omarchy/themes/`, and it replaces existing folders with those exact names. It needs no sudo.
+- `hyprland.lua` in each theme is executed by Hyprland. Let the user review it before applying.
+- Never edit files under `/usr/share/omarchy/`. User changes belong in `~/.config/`.
+- Apply a variant with `omarchy theme set "Liquid Glass Dark"` (or `"Liquid Glass Light"`, `"Liquid Glass Warm"`). The user needs to open a new terminal window to see terminal transparency.
+- The screensaver (`./screensaver/install.sh`) asks for sudo once to place a `ttfx` shim in `/usr/local/bin`. Ask the user before running it. `./screensaver/install.sh --remove` reverts it.
+- The Sepia Web extension needs one manual step you cannot do for the user: loading `sepia-web/extension` via `chrome://extensions` → Developer mode → Load unpacked. `./sepia-web/install.sh` only registers a native messaging host in the user's browser config directory (no sudo).
+
+## Install
+
+```bash
+git clone https://github.com/vsvito420/omarchy-liquid-glass.git
+cd omarchy-liquid-glass
+./install.sh
+omarchy theme set "Liquid Glass Dark"   # or "Liquid Glass Light" / "Liquid Glass Warm"
+```
+
+## Repository layout
+
+- `themes/liquid-glass-dark/`, `themes/liquid-glass-light/`, `themes/liquid-glass-warm/`: one Omarchy theme each (`colors.toml`, `hyprland.lua`, `shell.toml`, terminal configs for foot, Alacritty, kitty and Ghostty, `backgrounds/`).
+- `install.sh`: copies the three themes into `~/.config/omarchy/themes/`.
+- `screensaver/`: optional Python 3.11+ terminal screensaver (styles `retro` and `sun`), config in `~/.config/liquid-glass/screensaver.toml`. Runs only while a `liquid-glass-*` theme is applied.
+- `sepia-web/`: Manifest V3 extension (`extension/`) plus a Python native messaging host (`host/sepia-host.py`) that reports the active theme from `~/.local/state/omarchy/current/`. Theme names that trigger sepia are listed in `SEPIA_THEMES` in `extension/background.js`.
+- `tools/glass-finish.sh`: regenerates terminal and shell files from Omarchy's templates for the applied variant.
+- `docs/`: this website.
+
+## Tweaking
+
+- Blur, rounding, shadows, window opacity, animations: `themes/<variant>/hyprland.lua`
+- Bar, menu and notification translucency (`background-alpha`): `themes/<variant>/shell.toml`
+- Terminal transparency: `alpha` in `foot.ini`, `opacity` in `alacritty.toml`, `background_opacity` in `kitty.conf`, `background-opacity` in `ghostty.conf`
+- Colors: `themes/<variant>/colors.toml`
+
+After editing an installed copy in `~/.config/omarchy/themes/<variant>/`, re-apply it with `omarchy theme set`.
+
+## Full documentation
+
+- README: https://raw.githubusercontent.com/vsvito420/omarchy-liquid-glass/main/README.md
