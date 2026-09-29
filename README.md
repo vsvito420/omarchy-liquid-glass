@@ -8,6 +8,7 @@ A macOS / iOS-inspired "liquid glass" theme for [Omarchy](https://omarchy.org), 
 - Springy, iOS-like window and workspace animations
 - Apple system color palette (accessible high-contrast variants in light mode)
 - Warm variant: parchment background, brown text, terracotta accent and earthy terminal colors
+- Matching Chromium / Chrome color: black toolbar in dark, frosted blue-grey in light, parchment in warm
 - Optional browser extension that turns white web pages sepia while the warm variant is active
 - Original gradient wallpapers for both variants, plus a synthwave Omarchy wallpaper in dark
 - Optional screensaver: a drive through a glass landscape under a live 24h sky
